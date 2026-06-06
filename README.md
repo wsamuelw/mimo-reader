@@ -64,14 +64,6 @@ The app uses the MiMo TTS API with the following models:
 | China | `https://token-plan-cn.xiaomimimo.com/v1/chat/completions` |
 | Standard | `https://api.xiaomimimo.com/v1/chat/completions` |
 
-## Benchmark Tools
-
-The repo includes three benchmark tools:
-
-- **[Sample Rate Benchmark](sample-rate-benchmark.html)** — Test voice clone latency at different sample rates
-- **[Triple-Decode Benchmark](triple-decode-benchmark.html)** — Compare old (3x decode) vs new (1x decode) audio processing
-- **[Voice Clone Benchmark](voice-clone-benchmark.html)** — Measure voice clone latency and variability
-
 ## Tech Stack
 
 - **Frontend:** Vanilla HTML, CSS, JavaScript (single-file app)
