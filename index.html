@@ -1,0 +1,2138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MiMo TTS Reader</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'JetBrains Mono', monospace;
+    height: 100vh; display: flex; flex-direction: column;
+    background: var(--bg); color: var(--text); transition: background 0.25s, color 0.25s;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* ── Focus & Accessibility ───────────────────────────────────── */
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
+  .sr-only-focusable:focus { position: static; width: auto; height: auto; padding: inherit; margin: inherit; overflow: visible; clip: auto; white-space: normal; }
+
+  /* ── Theme Variables ─────────────────────────────────────────── */
+  :root {
+    --bg: #000; --bg-raised: #0a0a0a; --bg-card: #111; --bg-selected: #1a1a1a;
+    --border: #1a1a1a; --border-hover: #444; --border-card: #222; --border-focus: #444;
+    --text: #fff; --text-muted: #999; --text-dim: #888; --text-faint: #777; --text-accent: #fff;
+    --accent: #4ade80; --accent-hover: #22c55e; --success: #4ade80; --error: #ff6b6b;
+    --success-bg: #1b2d1b; --success-border: #204a20; --error-bg: #2d1b1b; --error-border: #4a2020;
+    --player-bg: #0a0a0a; --progress-bg: #222; --snackbar-bg: #222; --snackbar-text: #fff;
+    --modal-bg: #0a0a0a; --modal-border: #222; --input-bg: #0a0a0a;
+    --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px;
+    --btn-text: #000;
+    color-scheme: dark;
+  }
+  [data-theme="light"] {
+    --bg: #fff; --bg-raised: #f8f8f8; --bg-card: #f0f0f0; --bg-selected: #e8e8e8;
+    --border: #e0e0e0; --border-hover: #bbb; --border-card: #d0d0d0; --border-focus: #999;
+    --text: #000; --text-muted: #333; --text-dim: #666; --text-faint: #666; --text-accent: #000;
+    --accent: #000; --accent-hover: #333; --success: #1e6e1e; --error: #b71c1c;
+    --success-bg: #e8f5e9; --success-border: #a5d6a7; --error-bg: #fce4ec; --error-border: #ef9a9a;
+    --player-bg: #f8f8f8; --progress-bg: #ddd; --snackbar-bg: #333; --snackbar-text: #fff;
+    --modal-bg: #fff; --modal-border: #e0e0e0; --input-bg: #f8f8f8;
+    --btn-text: #fff;
+    color-scheme: light;
+  }
+
+  /* ── Top Bar ─────────────────────────────────────────────────── */
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px; padding-top: max(12px, env(safe-area-inset-top));
+    border-bottom: 1px solid var(--border); flex-shrink: 0;
+    background: var(--bg); transition: background 0.25s;
+    max-width: 1200px; margin: 0 auto; width: 100%;
+  }
+  .topbar-left { display: flex; align-items: center; gap: 10px; }
+  .topbar-left svg { width: 22px; height: 22px; }
+  .topbar-left h1 { font-size: 16px; font-weight: 700; letter-spacing: -0.3px; color: var(--accent); }
+  .tagline { font-size: 10px; color: var(--text-dim); letter-spacing: 1px; margin-top: 2px; }
+  .powered-by { font-size: 9px; color: var(--text-faint); letter-spacing: 0.5px; margin-top: 1px; }
+  .topbar-right { display: flex; gap: 8px; align-items: center; }
+  .topbar-btn {
+    background: transparent; border: 1px solid var(--border-card); color: var(--text-muted);
+    padding: 8px 12px; border-radius: var(--radius-sm); font-size: 10px; cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, transform 0.15s; font-family: 'JetBrains Mono', monospace; min-height: 44px;
+    text-transform: uppercase; letter-spacing: 0.5px; text-decoration: none;
+    display: inline-flex; align-items: center;
+  }
+  .topbar-btn:hover { border-color: var(--border-hover); color: var(--text); }
+  .topbar-btn:active { transform: scale(0.97); }
+  .theme-toggle {
+    width: 44px; height: 44px; border-radius: var(--radius-md); background: transparent;
+    border: 1px solid var(--border-card); color: var(--text-muted);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: border-color 0.15s, color 0.15s; font-size: 16px;
+  }
+  .theme-toggle:hover { border-color: var(--border-hover); color: var(--text); }
+  .theme-toggle .icon-sun { display: none; }
+  .theme-toggle .icon-moon { display: block; }
+  [data-theme="light"] .theme-toggle .icon-sun { display: block; }
+  [data-theme="light"] .theme-toggle .icon-moon { display: none; }
+
+  /* ── Main Split Layout ───────────────────────────────────────── */
+  .main { flex: 1; display: flex; overflow: hidden; max-width: 1200px; margin: 0 auto; width: 100%; }
+
+  /* ── Left Panel — Text ───────────────────────────────────────── */
+  .left-panel { flex: 1; display: flex; flex-direction: column; padding: 20px; gap: 0; overflow: hidden; }
+  .textarea-wrap { flex: 1; position: relative; }
+  .textarea-wrap textarea {
+    width: 100%; height: 100%; background: var(--bg-raised); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); color: var(--text); font-size: 14px; line-height: 1.7;
+    padding: 16px 16px 48px 16px; resize: none; outline: none; font-family: 'JetBrains Mono', monospace;
+    transition: border-color 0.15s, background 0.25s, color 0.25s;
+  }
+  .textarea-wrap textarea::placeholder { color: var(--text-faint); }
+  .textarea-wrap textarea:focus { border-color: var(--border-focus); }
+  .char-count { position: absolute; bottom: 12px; right: 14px; font-size: 10px; color: var(--text-dim); pointer-events: none; }
+  .shortcut-hint { position: absolute; bottom: 32px; right: 14px; font-size: 9px; color: var(--text-faint); pointer-events: none; letter-spacing: 0.3px; }
+  .gen-btn-wrap { position: absolute; bottom: 12px; left: 14px; }
+  .est-time { font-size: 9px; color: var(--text-faint); margin-top: 4px; height: 14px; letter-spacing: 0.3px; }
+
+  /* ── Generate Button ─────────────────────────────────────────── */
+  .gen-btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    padding: 10px 24px; border-radius: var(--radius-md); width: 220px;
+    background: var(--accent); border: none; color: var(--btn-text);
+    font-size: 12px; font-weight: 700; cursor: pointer;
+    transition: background 0.15s, color 0.15s; white-space: nowrap; font-family: 'JetBrains Mono', monospace;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .gen-btn:hover { background: var(--accent-hover); }
+  .gen-btn.cancel {
+    background: var(--accent);
+    color: var(--btn-text); pointer-events: auto; opacity: 1;
+  }
+  .gen-btn.cancel:hover { background: var(--accent-hover); }
+  .gen-btn.cancel .spinner { display: none; }
+  .gen-btn.cancel .cancel-icon { display: none; }
+
+  /* Spinner styles */
+  .gen-btn .spinner {
+    display: none;
+    width: 14px; height: 14px; border: 2px solid var(--btn-text); border-top-color: transparent;
+    border-radius: 50%; animation: btn-spin 0.7s linear infinite; flex-shrink: 0;
+    will-change: transform;
+  }
+  .gen-btn.loading .spinner { display: block; }
+  @keyframes btn-spin { to { transform: rotate(360deg); } }
+
+  /* Typewriter effect — clip-path for GPU compositing */
+  .gen-btn.cancel #genBtnLabel {
+    display: inline-block;
+    white-space: nowrap;
+    border-right: 2px solid var(--btn-text);
+    animation: typewriter-reveal 1.5s steps(10) infinite, blink-caret-color 0.7s step-end infinite;
+    will-change: clip-path;
+  }
+  @keyframes typewriter-reveal {
+    0% { clip-path: inset(0 100% 0 0); }
+    40% { clip-path: inset(0 0% 0 0); }
+    70% { clip-path: inset(0 0% 0 0); }
+    100% { clip-path: inset(0 100% 0 0); }
+  }
+  @keyframes blink-caret-color {
+    0%,100% { border-color: var(--btn-text); }
+    50% { border-color: transparent; }
+  }
+
+  /* Light mode: rainbow text effect — no typewriter */
+  [data-theme="light"] .gen-btn.cancel #genBtnLabel {
+    background: linear-gradient(90deg, #ff0000, #ff8800, #ffff00, #00ff00, #0088ff, #8800ff, #ff0088, #ff0000);
+    background-size: 200% 100%;
+    -webkit-background-clip: text; background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: sweep-reverse 0.5s linear infinite;
+    border-right: 2px solid transparent;
+  }
+  @keyframes sweep-reverse { 0% { background-position: 200% 50%; } 100% { background-position: 0% 50%; } }
+  .cancel-icon {
+    width: 14px; height: 14px; background: var(--btn-text); border-radius: 2px;
+    position: relative; flex-shrink: 0; display: none;
+  }
+  .cancel-icon::before, .cancel-icon::after {
+    content: ''; position: absolute; top: 50%; left: 50%;
+    width: 8px; height: 2px; background: var(--btn-text); border-radius: 1px;
+  }
+  .cancel-icon::before { transform: translate(-50%, -50%) rotate(45deg); }
+  .cancel-icon::after { transform: translate(-50%, -50%) rotate(-45deg); }
+
+  /* ── Inline Audio Player ─────────────────────────────────────── */
+  .audio-player {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 16px; background: var(--player-bg); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); margin-top: 12px;
+    transition: background 0.25s;
+  }
+  .play-btn {
+    width: 44px; height: 44px; border-radius: 50%;
+    background: var(--accent); border: none; color: var(--btn-text);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; flex-shrink: 0; transition: background 0.15s;
+  }
+  .play-btn:hover { background: var(--accent-hover); }
+  .play-btn svg { width: 16px; height: 16px; }
+  .progress-wrap { flex: 1; display: flex; align-items: center; gap: 10px; }
+  .progress-bar { flex: 1; height: 6px; background: var(--progress-bg); border-radius: 3px; cursor: pointer; position: relative; }
+  .progress-bar::before { content: ''; position: absolute; top: -10px; bottom: -10px; left: 0; right: 0; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 3px; width: 0%; pointer-events: none; will-change: width; }
+  .time-label { font-size: 11px; color: var(--text-dim); font-variant-numeric: tabular-nums; min-width: 32px; }
+  .dl-btn {
+    width: 44px; height: 44px; border-radius: var(--radius-md); background: transparent;
+    border: 1px solid var(--border-card); color: var(--text-dim);
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; flex-shrink: 0; transition: border-color 0.15s, color 0.15s;
+  }
+  .dl-btn:hover { border-color: var(--border-hover); color: var(--text-muted); }
+  .dl-btn svg { width: 14px; height: 14px; }
+  .dl-wrap { position: relative; }
+  .dl-menu { display: none; position: absolute; bottom: 100%; right: 0; margin-bottom: 6px; background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 8px; overflow: hidden; min-width: 140px; z-index: 50; }
+  .dl-menu.open { display: block; }
+  .dl-option { display: block; width: 100%; padding: 8px 14px; background: transparent; border: none; color: var(--text-muted); font-size: 11px; font-family: 'JetBrains Mono', monospace; text-align: left; cursor: pointer; white-space: nowrap; }
+  .dl-option:hover { background: var(--bg-selected); color: var(--text); }
+
+  /* ── Right Panel — Voices ────────────────────────────────────── */
+  .right-panel {
+    width: 420px; flex-shrink: 0; border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow: hidden; height: 100%;
+    background: var(--bg); transition: background 0.25s;
+  }
+  .resize-handle {
+    width: 5px; flex-shrink: 0; cursor: col-resize;
+    background: transparent; transition: background 0.15s;
+    position: relative;
+  }
+  .resize-handle::after {
+    content: ''; position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%); width: 3px; height: 32px;
+    border-radius: 2px; background: var(--border); transition: background 0.15s;
+  }
+  .resize-handle:hover { background: var(--border); }
+  .resize-handle:hover::after { background: var(--accent); }
+  .resize-handle.dragging { background: var(--accent); opacity: 0.3; }
+  .right-header {
+    padding: 12px 16px; border-bottom: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 10px; flex-shrink: 0;
+  }
+  .right-top { display: flex; align-items: center; justify-content: space-between; }
+  .right-top h2 { font-size: 10px; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 2px; }
+  .voice-count { font-size: 11px; color: var(--text-dim); }
+  .search-wrap { position: relative; }
+  .search-input {
+    width: 100%; padding: 8px 12px 8px 32px; border-radius: var(--radius-md);
+    border: 1px solid var(--border-card); background: var(--input-bg); color: var(--text);
+    font-size: 12px; font-family: 'JetBrains Mono', monospace; outline: none; transition: border-color 0.15s;
+  }
+  .search-input::placeholder { color: var(--text-faint); }
+  .search-input:focus { border-color: var(--accent); }
+  .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--text-dim); }
+  .filter-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .filter-chip {
+    padding: 6px 14px; border-radius: 4px; border: 1px solid var(--border-card);
+    background: var(--bg-card); color: var(--text-dim); font-size: 11px; cursor: pointer;
+    font-family: 'JetBrains Mono', monospace; transition: background 0.15s, border-color 0.15s, color 0.15s;
+    display: inline-flex; align-items: center;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .filter-chip:hover { border-color: var(--border-hover); color: var(--text-muted); }
+  .filter-chip.active { background: var(--accent); border-color: var(--accent); color: var(--btn-text); }
+  [data-theme="light"] .filter-chip.active { background: var(--success-bg); border-color: var(--success-border); color: var(--accent); }
+
+  /* ── Voice List ──────────────────────────────────────────────── */
+  .right-body { flex: 1; min-height: 0; overflow-y: auto; }
+  #panelDesign, #panelClone { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+  .right-body::-webkit-scrollbar { width: 6px; }
+  .right-body::-webkit-scrollbar-thumb { background: var(--border-card); border-radius: 3px; }
+  .voice-item {
+    display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+    cursor: pointer; transition: background 0.1s; border-left: 3px solid transparent;
+  }
+  .voice-item:hover { background: var(--bg-card); }
+  .voice-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 2px; }
+  .voice-item.selected { background: var(--bg-selected); border-left-color: var(--accent); }
+  .voice-item-icon { font-size: 18px; flex-shrink: 0; }
+  .voice-item-info { flex: 1; min-width: 0; }
+  .voice-item-name { font-size: 12px; font-weight: 500; color: var(--text-muted); }
+  .voice-item.selected .voice-item-name { color: var(--accent); }
+  .voice-item-desc { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .voice-preview-btn { width: 28px; height: 28px; border-radius: 50%; background: transparent; border: 1px solid var(--border-card); color: var(--text-dim); display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.15s; }
+  .voice-preview-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .voice-preview-btn:active { transform: scale(0.9); }
+  .voice-preview-btn.loading { pointer-events: none; opacity: 0.5; }
+  .voice-preview-btn.playing { border-color: var(--accent); color: var(--accent); background: rgba(74,222,128,0.1); }
+  .voice-preview-btn svg { width: 10px; height: 10px; }
+  @keyframes previewSpin { to { transform: rotate(360deg); } }
+  .voice-preview-btn.loading svg { animation: previewSpin 0.7s linear infinite; }
+
+  /* ── Voice Preview Panel ────────────────────────────────────── */
+  .voice-preview { flex-shrink: 0; border-top: 1px solid var(--border); background: var(--bg-raised); }
+  .preview-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 16px; border-bottom: 1px solid var(--border); }
+  .preview-header-left { display: flex; align-items: center; gap: 8px; }
+  .preview-header-left span { font-size: 18px; }
+  .preview-header-left strong { font-size: 12px; font-weight: 600; color: var(--text); }
+  .preview-actions { display: flex; gap: 8px; align-items: center; }
+  .preview-reset { background: transparent; border: 1px solid var(--border-card); color: var(--text-dim); padding: 4px 10px; border-radius: 4px; font-size: 10px; cursor: pointer; font-family: 'JetBrains Mono', monospace; transition: border-color 0.15s, color 0.15s; }
+  .preview-reset:hover { border-color: var(--accent); color: var(--accent); }
+  .random-btn { display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 4px; border: 1px solid var(--border-card); background: transparent; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.15s; letter-spacing: 0.3px; }
+  .random-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(74,222,128,0.08); }
+  .random-btn:active { transform: scale(0.95); }
+  .random-btn svg { width: 13px; height: 13px; }
+  @keyframes diceSpin { 0% { transform: rotate(0deg) scale(1); } 50% { transform: rotate(180deg) scale(1.15); } 100% { transform: rotate(360deg) scale(1); } }
+  .random-btn.spinning svg { animation: diceSpin 0.5s ease-in-out; }
+  @keyframes descFlash { 0% { background: rgba(74,222,128,0.15); } 100% { background: transparent; } }
+  .preview-textarea.flash { animation: descFlash 0.6s ease-out; }
+  .preview-label { font-size: 9px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.5px; padding: 6px 16px 0; }
+  .preview-textarea { width: 100%; min-height: 72px; max-height: 120px; padding: 10px 16px; background: transparent; border: none; color: var(--text); font-size: 12px; font-family: 'JetBrains Mono', monospace; line-height: 1.6; resize: vertical; outline: none; }
+  .preview-textarea::placeholder { color: var(--text-faint); }
+  .preview-textarea:focus { box-shadow: inset 0 0 0 1px var(--accent); }
+  .preview-tip { padding: 6px 16px 10px; font-size: 10px; color: var(--text-faint); line-height: 1.5; }
+  .preview-tip strong { color: var(--text-dim); }
+
+  /* ── Snackbar ────────────────────────────────────────────────── */
+  .snackbar {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    padding: 10px 20px; border-radius: var(--radius-md); font-size: 13px;
+    pointer-events: none; opacity: 0; transition: opacity 0.2s; z-index: 100;
+    display: flex; align-items: center; gap: 12px;
+    max-width: 90vw; max-height: 120px; overflow-y: auto;
+  }
+  .snackbar.show { opacity: 1; pointer-events: auto; }
+  .snackbar.success { background: var(--success-bg); color: var(--success); border: 1px solid var(--success-border); }
+  .snackbar.error { background: var(--error-bg); color: var(--error); border: 1px solid var(--error-border); }
+  .snackbar.info { background: var(--bg-raised); color: var(--text); border: 1px solid var(--border); }
+  .snackbar-dismiss {
+    background: none; border: none; color: inherit; cursor: pointer;
+    font-size: 11px; font-weight: 600; font-family: 'JetBrains Mono', monospace; min-height: 36px;
+  }
+  .snackbar-undo { background: none; border: 1px solid var(--border-card); color: var(--accent); padding: 2px 8px; border-radius: 4px; font-size: 10px; cursor: pointer; font-family: 'JetBrains Mono', monospace; margin-left: 8px; }
+  .snackbar-undo:hover { background: rgba(74,222,128,0.1); }
+
+  /* ── Settings Modal ──────────────────────────────────────────── */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    z-index: 300; align-items: center; justify-content: center; padding: 16px;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--modal-bg); border: 1px solid var(--modal-border); border-radius: var(--radius-lg);
+    width: 100%; max-width: 520px; padding: 24px;
+    box-shadow: 0 8px 32px rgba(0,0,0,.3);
+  }
+  .modal h3 { font-size: 18px; margin-bottom: 16px; }
+  .modal-field { margin-bottom: 14px; }
+  .modal-field label {
+    display: block; font-size: 12px; font-weight: 600; color: var(--text-muted);
+    margin-bottom: 4px; text-transform: uppercase; letter-spacing: .5px;
+  }
+  .modal-field input, .modal-field select {
+    width: 100%; padding: 10px 14px; border: 1px solid var(--border-card); border-radius: var(--radius-md);
+    font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--text); background: var(--input-bg);
+    transition: background 0.25s; appearance: none;
+  }
+  .modal-field input:focus, .modal-field select:focus { border-color: var(--accent); }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 20px; }
+  .modal-cancel {
+    padding: 8px 16px; border: 1px solid var(--border-card); border-radius: var(--radius-sm);
+    background: transparent; cursor: pointer; font-family: 'JetBrains Mono', monospace; font-size: 14px;
+    color: var(--text-muted); transition: border-color 0.15s, color 0.15s; min-height: 44px;
+  }
+  .modal-cancel:hover { border-color: var(--border-hover); color: var(--text); }
+  .modal-save {
+    padding: 8px 16px; border: none; border-radius: var(--radius-sm);
+    background: var(--accent); color: var(--btn-text); cursor: pointer;
+    font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 500; transition: background 0.15s;
+    min-height: 44px;
+  }
+  .modal-save:hover { background: var(--accent-hover); }
+  .key-wrap { position: relative; }
+
+  /* ── Custom Select Dropdown ──────────────────────────────────── */
+  .custom-select { position: relative; }
+  .custom-select-trigger {
+    width: 100%; padding: 10px 14px; border: 1px solid var(--border-card); border-radius: var(--radius-md);
+    background: var(--input-bg); color: var(--text); font-family: 'JetBrains Mono', monospace;
+    font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: space-between;
+    transition: border-color 0.15s;
+  }
+  .custom-select-trigger:hover { border-color: var(--border-hover); }
+  .custom-select-trigger svg { color: var(--text-dim); flex-shrink: 0; }
+  .custom-select-options {
+    display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+    background: var(--modal-bg); border: 1px solid var(--border-card); border-radius: var(--radius-md);
+    z-index: 10; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,.3);
+  }
+  .custom-select.open .custom-select-options { display: block; }
+  .custom-select-option {
+    padding: 10px 14px; font-family: 'JetBrains Mono', monospace; font-size: 13px;
+    color: var(--text-muted); cursor: pointer; transition: background 0.1s;
+  }
+  .custom-select-option:hover { background: var(--bg-card); color: var(--text); }
+  .custom-select-option.selected { color: var(--accent); background: var(--bg-selected); }
+
+  /* ── Mode Toggle ─────────────────────────────────────────────── */
+  .mode-toggle { display: flex; gap: 4px; margin-bottom: 12px; }
+  .mode-btn {
+    flex: 1; padding: 8px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-card);
+    background: transparent; color: var(--text-dim); font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; font-weight: 600; cursor: pointer; text-transform: uppercase;
+    letter-spacing: 0.5px; transition: background 0.15s, border-color 0.15s, color 0.15s; min-height: 44px;
+  }
+  .mode-btn:hover { border-color: var(--border-hover); color: var(--text-muted); }
+  .mode-btn.active { background: var(--accent); border-color: var(--accent); color: var(--btn-text); }
+
+  /* ── Upload Zone (Voice Clone) ────────────────────────────────── */
+  .clone-hint { font-size: 11px; color: var(--text-dim); line-height: 1.5; margin-top: 4px; }
+  .clone-tips { margin-top: 8px; }
+  .clone-tips-toggle { display: flex; align-items: center; gap: 6px; background: none; border: none; color: var(--text-faint); font-size: 10px; cursor: pointer; font-family: 'JetBrains Mono', monospace; padding: 4px 0; }
+  .clone-tips-toggle:hover { color: var(--text-dim); }
+  .clone-tips-toggle svg { transition: transform 0.15s; }
+  .clone-tips.open .clone-tips-toggle svg { transform: rotate(180deg); }
+  .clone-tips-body { display: none; padding: 8px 0 0; font-size: 10px; color: var(--text-faint); line-height: 1.8; }
+  .clone-tips.open .clone-tips-body { display: block; }
+  .clone-tips-body strong { color: var(--text-dim); }
+  .upload-zone {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 32px 20px; margin: 16px; border: 2px dashed var(--border-card);
+    border-radius: var(--radius-lg); text-align: center; gap: 12px;
+    transition: border-color 0.15s, background 0.15s; min-height: 200px;
+  }
+  .upload-zone:hover, .upload-zone.drag-over { border-color: var(--accent); background: var(--bg-card); }
+  .upload-icon { font-size: 32px; }
+  .upload-text { font-size: 13px; color: var(--text-muted); font-weight: 500; }
+  .upload-subtext { font-size: 11px; color: var(--text-dim); }
+  .upload-btn {
+    padding: 8px 16px; border-radius: var(--radius-sm); border: 1px solid var(--border-card);
+    background: transparent; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; cursor: pointer; transition: border-color 0.15s, color 0.15s; min-height: 44px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .upload-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .upload-divider { display: flex; align-items: center; gap: 8px; width: 80%; margin: 4px 0; }
+  .upload-divider-line { flex: 1; height: 1px; background: var(--border-card); }
+  .upload-divider-text { font-size: 10px; color: var(--text-dim); text-transform: uppercase; }
+  .record-btn {
+    display: flex; align-items: center; gap: 6px; padding: 8px 16px;
+    border-radius: var(--radius-sm); border: 1px solid var(--border-card);
+    background: transparent; color: var(--text-muted); font-family: 'JetBrains Mono', monospace;
+    font-size: 11px; cursor: pointer; transition: border-color 0.15s, color 0.15s; min-height: 44px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .record-btn:hover { border-color: var(--error); color: var(--error); }
+  .record-btn.recording { background: #c62828; border-color: #c62828; color: #fff; animation: pulse 1s infinite; }
+  .record-btn svg { width: 14px; height: 14px; }
+  @keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(198,40,40,0.5); } 50% { box-shadow: 0 0 0 6px rgba(198,40,40,0); } }
+
+  /* ── Clone Preview ────────────────────────────────────────────── */
+  .clone-preview { padding: 16px; }
+  .clone-preview-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+  .clone-preview-label { font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .clone-preview-remove {
+    width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border-card);
+    background: transparent; color: var(--text-dim); cursor: pointer; font-size: 12px;
+    display: flex; align-items: center; justify-content: center; transition: border-color 0.15s, color 0.15s;
+  }
+  .clone-preview-remove:hover { border-color: var(--error); color: var(--error); }
+  .clone-preview-info { font-size: 10px; color: var(--text-dim); margin-top: 6px; font-family: 'JetBrains Mono', monospace; }
+
+  /* ── File Info ──────────────────────────────────────────────── */
+  .file-info { padding: 12px 16px; border-top: 1px solid var(--border); }
+  .file-info-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; }
+  .file-info-label { font-size: 10px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.5px; }
+  .file-info-value { font-size: 11px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; }
+  .file-info-value.warning { color: var(--error); }
+
+  /* ── Mobile ──────────────────────────────────────────────────── */
+  @media (max-width: 1024px) {
+    .right-panel { width: 320px; }
+  }
+  @media (max-width: 768px) {
+    .main { flex-direction: column; max-width: none; }
+    .topbar { max-width: none; }
+    .resize-handle { display: none; }
+    .right-panel { width: 100%; height: 40vh; border-left: none; border-top: 1px solid var(--border); }
+    .left-panel { height: 60vh; }
+  }
+  @media (max-width: 480px) {
+    .topbar { flex-wrap: wrap; padding: 10px 16px; gap: 8px; }
+    .topbar-left h1 { font-size: 14px; }
+    .topbar-right { gap: 4px; flex-wrap: wrap; }
+    .topbar-btn { font-size: 10px; padding: 6px 8px; min-height: 44px; }
+  }
+  /* ── Onboarding Hint ────────────────────────────────────────── */
+  .onboard-hint { font-size: 10px; color: var(--text-faint); letter-spacing: 0.3px; margin-bottom: 10px; padding: 0 2px; transition: opacity 0.3s; }
+  .onboard-hint.hidden { display: none; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<a href="#textInput" class="sr-only sr-only-focusable">Skip to content</a>
+<header class="topbar">
+  <div class="topbar-left">
+    <span aria-hidden="true" style="font-size:20px">🎙️</span>
+    <div>
+      <h1>MiMo TTS Reader</h1>
+      <p class="tagline">Text to speech, read beautifully</p>
+      <p class="powered-by">Powered by Xiaomi MiMo V2.5 TTS VoiceDesign & VoiceClone</p>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Toggle light/dark mode" title="Toggle light/dark mode">
+      <span class="icon-moon" aria-hidden="true">🌙</span>
+      <span class="icon-sun" aria-hidden="true">☀️</span>
+    </button>
+    <a class="topbar-btn" href="https://github.com/wsamuelw" target="_blank" rel="noopener">Feedback</a>
+    <a class="topbar-btn" href="https://github.com/wsamuelw" target="_blank" rel="noopener">Docs</a>
+    <button class="topbar-btn" onclick="openSettings()">API Settings</button>
+  </div>
+</header>
+
+<!-- MAIN SPLIT LAYOUT -->
+<div class="main">
+  <!-- LEFT: Text + Controls -->
+  <div class="left-panel">
+    <!-- Onboarding Hint -->
+    <div class="onboard-hint" id="onboardHint">Enter text → pick a voice → generate audio</div>
+    <!-- Mode Toggle -->
+    <div class="mode-toggle">
+      <button class="mode-btn active" id="modeDesign" onclick="setMode('design')">Voice Design</button>
+      <button class="mode-btn" id="modeClone" onclick="setMode('clone')">Voice Clone</button>
+    </div>
+    <div class="textarea-wrap">
+      <textarea id="textInput" maxlength="5000" placeholder="Type or paste text here — up to 5,000 characters" spellcheck="false">Generate professional voiceovers for ads, podcasts, and videos. Choose from 100 voices or clone your own. Download in WAV or MP3 format for any project.</textarea>
+      <div class="char-count"><span id="charCount">198</span> / 5,000</div>
+      <div class="shortcut-hint">⌘+Enter to generate</div>
+      <div class="gen-btn-wrap">
+        <button class="gen-btn" id="genBtn" onclick="generate()" title="Generate speech (⌘+Enter)">
+          <div class="spinner"></div>
+          <div class="cancel-icon"></div>
+          <span id="genBtnLabel">Generate</span>
+        </button>
+        <div class="est-time" id="estTime"></div>
+      </div>
+    </div>
+    <div class="audio-player" id="audioPlayer">
+      <button class="play-btn" id="playBtn" onclick="togglePlay()" aria-label="Play">
+        <svg viewBox="0 0 24 24" fill="currentColor" id="playIcon" aria-hidden="true"><polygon points="6 3 20 12 6 21"/></svg>
+      </button>
+      <div class="progress-wrap">
+        <span class="time-label" id="curTime">0:00</span>
+        <div class="progress-bar" id="progBar" role="slider" aria-label="Playback position" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0" onclick="seekTo(event)" onkeydown="handleProgressKeydown(event)"><div class="progress-fill" id="progFill"></div></div>
+        <span class="time-label" id="durTime">0:00</span>
+      </div>
+      <div class="dl-wrap">
+        <button class="dl-btn" id="dlBtn" onclick="toggleDownloadMenu()" aria-label="Download audio" title="Download" aria-haspopup="menu" aria-expanded="false">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        </button>
+        <div class="dl-menu" id="dlMenu" role="menu" onkeydown="handleDownloadMenuKeydown(event)">
+          <button class="dl-option" role="menuitem" tabindex="-1" onclick="downloadAudio('wav')">Download WAV</button>
+          <button class="dl-option" role="menuitem" tabindex="-1" onclick="downloadAudio('mp3')">Download MP3</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESIZE HANDLE -->
+  <div class="resize-handle" id="resizeHandle"></div>
+
+  <!-- RIGHT: Voice Browser / Upload Zone -->
+  <div class="right-panel" id="rightPanel" role="region" aria-label="Voice selection">
+    <!-- Voice Design Panel -->
+    <div id="panelDesign">
+      <div class="right-header">
+        <div class="right-top">
+          <h2>Voices</h2>
+          <span class="voice-count" id="voiceCount">100</span>
+        </div>
+        <div class="search-wrap">
+          <span class="search-icon" aria-hidden="true">🔍</span>
+          <input class="search-input" id="voiceSearch" placeholder="Search voices..." aria-label="Search voices" oninput="filterVoices()">
+        </div>
+        <div class="filter-chips" id="filterChips">
+          <button class="filter-chip active" data-tag="all" onclick="setFilter('all')">All</button>
+          <button class="filter-chip" data-tag="conversational" onclick="setFilter('conversational')">Conversational</button>
+          <button class="filter-chip" data-tag="professional" onclick="setFilter('professional')">Professional</button>
+          <button class="filter-chip" data-tag="expressive" onclick="setFilter('expressive')">Expressive</button>
+          <button class="filter-chip" data-tag="youthful" onclick="setFilter('youthful')">Youthful</button>
+          <button class="filter-chip" data-tag="character" onclick="setFilter('character')">Character</button>
+          <button class="filter-chip" data-tag="accent" onclick="setFilter('accent')">Accent</button>
+        </div>
+      </div>
+      <div class="right-body" id="voiceList" role="radiogroup" aria-label="Available voices" onkeydown="handleVoiceListKeydown(event)"></div>
+
+      <!-- Voice Preview Panel -->
+      <div class="voice-preview" id="voicePreview">
+        <div class="preview-header">
+          <div class="preview-header-left">
+            <span id="previewIcon"></span>
+            <strong id="previewName"></strong>
+          </div>
+          <div class="preview-actions">
+            <button class="random-btn" id="randomBtn" onclick="randomiseVoice()" title="Generate random voice description">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/><circle cx="16" cy="8" r="1.5" fill="currentColor"/><circle cx="8" cy="16" r="1.5" fill="currentColor"/><circle cx="16" cy="16" r="1.5" fill="currentColor"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>
+              Random
+            </button>
+            <button class="preview-reset" onclick="resetVoiceDesc()">Reset</button>
+          </div>
+        </div>
+        <div class="preview-label">Voice Description (sent to API)</div>
+        <textarea class="preview-textarea" id="previewDesc" placeholder="Voice description..."></textarea>
+        <div class="preview-tip">
+          <strong>Tip:</strong> Modify the description to fine-tune the voice. Try adding accents, emotions, or age.
+        </div>
+      </div>
+    </div>
+
+    <!-- Voice Clone Panel -->
+    <div id="panelClone" style="display:none;">
+      <div class="right-header">
+        <div class="right-top">
+          <h2>Reference Audio</h2>
+        </div>
+        <p class="clone-hint">Upload a voice sample or record one. A few seconds is enough. Supports mp3, wav, webm, ogg, and m4a.</p>
+        <div class="clone-tips">
+          <button class="clone-tips-toggle" onclick="this.parentElement.classList.toggle('open')">
+            <span>💡 Tips for best results</span>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+          </button>
+          <div class="clone-tips-body">
+            <div>• Record <strong>5–30 seconds</strong> of clear speech</div>
+            <div>• Use a <strong>quiet room</strong> with no background noise</div>
+            <div>• <strong>One speaker only</strong> — no overlapping voices</div>
+            <div>• Avoid background music or sound effects</div>
+            <div>• Maximum duration: <strong>2 minutes</strong></div>
+          </div>
+        </div>
+      </div>
+      <div class="right-body">
+        <div class="upload-zone" id="uploadZone">
+          <div class="upload-icon">🎤</div>
+          <div class="upload-text">Drag & drop audio here</div>
+          <div class="upload-subtext">or</div>
+          <button class="upload-btn" onclick="document.getElementById('fileInput').click()">Choose File</button>
+          <input type="file" id="fileInput" accept=".mp3,.wav,.webm,.ogg,.m4a,audio/*" style="display:none" onchange="handleFileUpload(event)">
+          <div class="upload-divider">
+            <span class="upload-divider-line"></span>
+            <span class="upload-divider-text">or</span>
+            <span class="upload-divider-line"></span>
+          </div>
+          <button class="record-btn" id="recordBtn" onclick="toggleRecording()">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+            <span id="recordLabel">Record</span>
+            <span id="recordTimer" style="display:none;font-size:11px;font-variant-numeric:tabular-nums;margin-left:4px;">0:00</span>
+          </button>
+        </div>
+
+        <!-- Audio Preview (hidden until audio is loaded) -->
+        <div class="clone-preview" id="clonePreview" style="display:none;">
+          <div class="clone-preview-header">
+            <span class="clone-preview-label">Reference Audio</span>
+            <button class="clone-preview-remove" onclick="removeCloneAudio()" title="Remove audio">✕</button>
+          </div>
+          <audio id="cloneAudioEl" controls style="width:100%;height:36px;"></audio>
+          <div class="clone-preview-info" id="cloneInfo"></div>
+        </div>
+
+        <!-- File Info (shown immediately on upload) -->
+        <div class="file-info" id="fileInfo" style="display:none;">
+          <div class="file-info-row">
+            <span class="file-info-label">File</span>
+            <span class="file-info-value" id="fileInfoName"></span>
+          </div>
+          <div class="file-info-row">
+            <span class="file-info-label">Size</span>
+            <span class="file-info-value" id="fileInfoSize"></span>
+          </div>
+          <div class="file-info-row">
+            <span class="file-info-label">Duration</span>
+            <span class="file-info-value" id="fileInfoDuration"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ARIA Live Region for generation status -->
+<div class="sr-only" aria-live="assertive" id="genStatus"></div>
+
+<!-- SNACKBAR -->
+<div class="snackbar" id="snackbar" role="status" aria-live="polite" onmouseenter="pauseSnackbar()" onmouseleave="resumeSnackbar()">
+  <span id="snackbarMsg"></span>
+  <button class="snackbar-dismiss" onclick="hideSnackbar()">Dismiss</button>
+</div>
+
+<!-- SETTINGS MODAL -->
+<div class="modal-overlay" id="settingsModal" onclick="if(event.target===this)closeSettings()">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+    <h3 id="settingsTitle">⚙️ API Settings</h3>
+    <div class="modal-field">
+      <label>API Key</label>
+      <div class="key-wrap">
+        <input type="password" id="apiKeyInput" placeholder="tp-xxxxxxxxxx" onclick="this.type=this.type==='password'?'text':'password'" onblur="this.type='password'">
+      </div>
+    </div>
+    <div class="modal-field">
+      <label>Endpoint</label>
+      <div class="custom-select" id="apiRegionWrap">
+        <div class="custom-select-trigger" id="apiRegionTrigger" onclick="toggleDropdown()" role="button" tabindex="0" aria-haspopup="listbox" aria-expanded="false" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();toggleDropdown()}if(event.key==='ArrowDown'){event.preventDefault();toggleDropdown()}">
+          <span id="apiRegionLabel">Token Plan — Singapore</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        </div>
+        <div class="custom-select-options" id="apiRegionOptions" role="listbox">
+          <div class="custom-select-option" data-value="standard" role="option" tabindex="-1" onclick="selectOption('standard')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectOption('standard')}">Standard / PAYG</div>
+          <div class="custom-select-option" data-value="cn" role="option" tabindex="-1" onclick="selectOption('cn')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectOption('cn')}">Token Plan — China</div>
+          <div class="custom-select-option selected" data-value="sgp" role="option" tabindex="-1" onclick="selectOption('sgp')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectOption('sgp')}">Token Plan — Singapore</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-cancel" onclick="closeSettings()">Cancel</button>
+      <button class="modal-save" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ════════════════════════════════════════════════════════════════
+  // CONFIG
+  // ════════════════════════════════════════════════════════════════
+  const CONFIG = {
+    MAX_CHARS: 5000,
+    MAX_AUDIO_DURATION_S: 120,
+    MAX_FILE_SIZE: 5 * 1024 * 1024,
+    FILTER_DEBOUNCE_MS: 100,
+    MIN_PANEL_WIDTH: 220,
+    REQUEST_TIMEOUT_MS: 120000,
+    MP3_BLOCK_SIZE: 1152,
+    MP3_BITRATE: 128,
+    PROGRESS_INTERVAL_MS: 250,
+    PREVIEW_TEXT: 'Hello, this is a preview of my voice.',
+  };
+
+  const API_ENDPOINTS = {
+    standard: 'https://api.xiaomimimo.com/v1/chat/completions',
+    cn: 'https://token-plan-cn.xiaomimimo.com/v1/chat/completions',
+    sgp: 'https://token-plan-sgp.xiaomimimo.com/v1/chat/completions',
+  };
+
+  const VOICES = [
+    // ═══════════════ Conversational — Natural, everyday voices ═══════════════
+    { id: 'aria', name: 'Warm Female', apiDesc: 'A warm, calm female voice with a gentle tone', icon: '☕', tag: 'conversational' },
+    { id: 'luna', name: 'Soft Female', apiDesc: 'A gentle, soothing female voice with a relaxed pace', icon: '🌙', tag: 'conversational' },
+    { id: 'luna2', name: 'Gentle Female', apiDesc: 'A soft, kind female voice with warmth and empathy', icon: '🫶', tag: 'conversational' },
+    { id: 'willow2', name: 'Maternal Female', apiDesc: 'A nurturing, motherly female voice with natural warmth', icon: '🫂', tag: 'conversational' },
+    { id: 'willow', name: 'Mature Female', apiDesc: 'A warm, wise, grandmotherly female voice with a slow, comforting pace', icon: '🌿', tag: 'conversational' },
+    { id: 'lily', name: 'Sweet Female', apiDesc: 'A soft, youthful female voice with a sweet, airy quality', icon: '🌷', tag: 'conversational' },
+    { id: 'daisy', name: 'Cheerful Female', apiDesc: 'A bright, happy female voice with a warm smile in every word', icon: '🌼', tag: 'conversational' },
+    { id: 'maple', name: 'Cozy Female', apiDesc: 'A warm, comforting female voice like a cosy café conversation', icon: '🍁', tag: 'conversational' },
+    { id: 'sage', name: 'Deep Male', apiDesc: 'A soft, soothing male voice, like a bedtime storyteller', icon: '🌲', tag: 'conversational' },
+    { id: 'ember', name: 'Warm Male', apiDesc: 'A confident, elegant male voice with a rich, warm timbre', icon: '🔥', tag: 'conversational' },
+    { id: 'finn', name: 'Casual Male', apiDesc: 'A relaxed, friendly, conversational male voice', icon: '🤙', tag: 'conversational' },
+    { id: 'finn2', name: 'Cheerful Male', apiDesc: 'An upbeat, enthusiastic male voice with positive energy', icon: '☀️', tag: 'conversational' },
+    { id: 'oak', name: 'Fatherly Male', apiDesc: 'A kind, reassuring male voice with a paternal, trustworthy quality', icon: '🪵', tag: 'conversational' },
+    { id: 'hazel', name: 'Gentle Male', apiDesc: 'A soft-spoken, thoughtful male voice with a calming presence', icon: '🍃', tag: 'conversational' },
+    { id: 'podcast-f', name: 'Podcast Host Female', apiDesc: 'A conversational, engaging female voice with natural pauses and relatable warmth', icon: '🎙️', tag: 'conversational' },
+    { id: 'podcast-m', name: 'Podcast Host Male', apiDesc: 'A casual, insightful male voice with a conversational podcast style', icon: '🎧', tag: 'conversational' },
+    // ═══════════════ Professional — Polished, authoritative ═══════════════
+    { id: 'zara', name: 'Professional Female', apiDesc: 'A clear, articulate female newsreader tone with precise diction', icon: '💼', tag: 'professional' },
+    { id: 'zara2', name: 'Authoritative Female', apiDesc: 'A strong, commanding female voice suitable for announcements', icon: '📢', tag: 'professional' },
+    { id: 'mila2', name: 'Articulate Female', apiDesc: 'A precise, well-enunciated female voice with polished diction', icon: '🎯', tag: 'professional' },
+    { id: 'iris2', name: 'Narrative Female', apiDesc: 'A clear, expressive female voice with storytelling cadence', icon: '📖', tag: 'professional' },
+    { id: 'cleo', name: 'Elegant Female', apiDesc: 'A sophisticated, polished female voice with a luxury brand quality', icon: '💎', tag: 'professional' },
+    { id: 'nova2', name: 'Confident Female', apiDesc: 'A bold, confident female voice with authority and presence', icon: '👑', tag: 'professional' },
+    { id: 'vivian', name: 'Corporate Female', apiDesc: 'A polished, professional female voice for business presentations and reports', icon: '📊', tag: 'professional' },
+    { id: 'clara', name: 'Educator Female', apiDesc: 'A clear, patient female voice with an instructional, explainer-video quality', icon: '🎓', tag: 'professional' },
+    { id: 'bolt', name: 'Dynamic Male', apiDesc: 'A clear, professional news anchor voice', icon: '⚡', tag: 'professional' },
+    { id: 'bolt2', name: 'Professional Male', apiDesc: 'A polished, corporate male voice for presentations and reports', icon: '🏢', tag: 'professional' },
+    { id: 'echo', name: 'Clear Male', apiDesc: 'A deep, authoritative male voice with crisp articulation', icon: '🔊', tag: 'professional' },
+    { id: 'graham', name: 'Broadcast Male', apiDesc: 'A smooth, trustworthy male radio host voice with natural cadence', icon: '📻', tag: 'professional' },
+    { id: 'henry', name: 'Documentary Male', apiDesc: 'A measured, thoughtful male voice with gravitas, like a nature documentary narrator', icon: '🌍', tag: 'professional' },
+    { id: 'news-female', name: 'Breaking News Female', apiDesc: 'An urgent, fast-paced female news anchor voice with crisp diction', icon: '📰', tag: 'professional' },
+    { id: 'news-male', name: 'Breaking News Male', apiDesc: 'An authoritative, fast-paced male news anchor voice with gravitas', icon: '📡', tag: 'professional' },
+    { id: 'explainer', name: 'Explainer Video', apiDesc: 'A friendly, clear voice with upbeat pacing, perfect for tutorial and explainer videos', icon: '💡', tag: 'professional' },
+    { id: 'commercial-f', name: 'Commercial Female', apiDesc: 'A polished, persuasive female voice with a warm, advertising-ready tone', icon: '📺', tag: 'professional' },
+    { id: 'commercial-m', name: 'Commercial Male', apiDesc: 'A confident, trustworthy male voice with a smooth, advertising quality', icon: '🎯', tag: 'professional' },
+    { id: 'elderly-f', name: 'Elderly Female', apiDesc: 'A frail, wise elderly female voice, age 70+, with a gentle tremor and slow pace', icon: '👵', tag: 'professional' },
+    // ═══════════════ Expressive — Dramatic, emotional ═══════════════
+    { id: 'titan', name: 'Narrator Male', apiDesc: 'A rich, cinematic audiobook narrator voice with deep resonance', icon: '🎬', tag: 'expressive' },
+    { id: 'rex2', name: 'Storyteller Male', apiDesc: 'A captivating male voice with natural dramatic flair', icon: '📚', tag: 'expressive' },
+    { id: 'audiobook-f', name: 'Audiobook Female', apiDesc: 'A rich, expressive female voice with dramatic range, perfect for long-form narration', icon: '📖', tag: 'expressive' },
+    { id: 'audiobook-m', name: 'Audiobook Male', apiDesc: 'A deep, immersive male voice with character acting ability and narrative flow', icon: '📚', tag: 'expressive' },
+    { id: 'fierce', name: 'Fierce Female', apiDesc: 'A powerful, intense female voice with commanding presence and sharp delivery', icon: '🦁', tag: 'expressive' },
+    { id: 'storm', name: 'Storm Female', apiDesc: 'A fierce, dramatic female voice with emotional intensity and power', icon: '⛈️', tag: 'expressive' },
+    { id: 'blaze', name: 'Fire Female', apiDesc: 'A passionate, fiery female voice with rapid delivery and strong conviction', icon: '🔥', tag: 'expressive' },
+    { id: 'rex', name: 'Commanding Male', apiDesc: 'An authoritative, military-style male trailer voice', icon: '⚔️', tag: 'expressive' },
+    { id: 'axel', name: 'Edgy Male', apiDesc: 'A slightly raspy, confident, modern male voice', icon: '🎸', tag: 'expressive' },
+    { id: 'titan2', name: 'Gravelly Male', apiDesc: 'A rough, gravelly male voice with character and texture', icon: '🪨', tag: 'expressive' },
+    { id: 'intense', name: 'Intense Male', apiDesc: 'A focused, high-energy male voice with sharp delivery and urgency', icon: '🔥', tag: 'expressive' },
+    { id: 'rebel', name: 'Rebel Male', apiDesc: 'A raw, unconventional male voice with edge, attitude, and a rebellious streak', icon: '🏍️', tag: 'expressive' },
+    { id: 'blitz', name: 'Trailer Male', apiDesc: 'A deep, booming male voice with dramatic pauses and epic gravitas', icon: '💥', tag: 'expressive' },
+    // ═══════════════ Youthful — Young, energetic ═══════════════
+    { id: 'nova', name: 'Bright Female', apiDesc: 'A young, energetic female voice with bubbly enthusiasm', icon: '✨', tag: 'youthful' },
+    { id: 'mila', name: 'Sweet Female', apiDesc: 'A cute, youthful, anime-inspired female voice', icon: '🌸', tag: 'youthful' },
+    { id: 'aria2', name: 'Friendly Female', apiDesc: 'A cheerful, approachable female voice with a smile in the tone', icon: '😊', tag: 'youthful' },
+    { id: 'flirty', name: 'Flirty Female', apiDesc: 'A playful, charming female voice with upward inflections and a teasing tone', icon: '😘', tag: 'youthful' },
+    { id: 'sassy', name: 'Sassy Female', apiDesc: 'A bold, confident female voice with attitude, sharp wit, and expressive intonation', icon: '💅', tag: 'youthful' },
+    { id: 'cheeky', name: 'Cheeky Female', apiDesc: 'A playful, mischievous female voice with a light, bouncy rhythm and humorous undertone', icon: '😜', tag: 'youthful' },
+    { id: 'poppy', name: 'Bubbly Female', apiDesc: 'An energetic, fast-talking female voice with infectious enthusiasm and a bright tone', icon: '🎈', tag: 'youthful' },
+    { id: 'gigi', name: 'Trendy Female', apiDesc: 'A young, fashion-forward female voice with valley-girl inflections and slang', icon: '🛍️', tag: 'youthful' },
+    { id: 'charmer', name: 'Charming Male', apiDesc: 'A smooth, charismatic male voice with warmth and confident charm', icon: '🕺', tag: 'youthful' },
+    { id: 'hype', name: 'Hype Male', apiDesc: 'An energetic, high-octane male voice perfect for promos and excitement', icon: '🎤', tag: 'youthful' },
+    { id: 'jake', name: 'Bro Male', apiDesc: 'A laid-back, frat-boy male voice with casual slang and a carefree attitude', icon: '🏈', tag: 'youthful' },
+    { id: 'rico', name: 'Smooth Male', apiDesc: 'A slick, charismatic male DJ voice with rhythm and swagger', icon: '🎧', tag: 'youthful' },
+    { id: 'child-f', name: 'Young Girl', apiDesc: 'A high-pitched, innocent young girl voice, age 8-10, with bright energy', icon: '👧', tag: 'youthful' },
+    { id: 'child-m', name: 'Young Boy', apiDesc: 'A youthful, enthusiastic young boy voice, age 8-10, with curious energy', icon: '👦', tag: 'youthful' },
+    // ═══════════════ Character — Unique, stylised ═══════════════
+    { id: 'cleo2', name: 'Sultry Female', apiDesc: 'A deep, husky female voice with a smooth, velvety quality', icon: '🍷', tag: 'character' },
+    { id: 'iris', name: 'Whisper Female', apiDesc: 'A soft, intimate, ASMR-like female voice with breathy undertones', icon: '🦋', tag: 'character' },
+    { id: 'seductive', name: 'Seductive Female', apiDesc: 'A sultry, alluring female voice with a slow, deliberate pace and breathy undertones', icon: '🖤', tag: 'character' },
+    { id: 'mysterious', name: 'Mysterious Female', apiDesc: 'A low, enigmatic female voice with a slow cadence and an air of intrigue', icon: '🔮', tag: 'character' },
+    { id: 'romantic', name: 'Romantic Female', apiDesc: 'A soft, tender female voice with emotional depth and a poetic rhythm', icon: '🌹', tag: 'character' },
+    { id: 'dreamy', name: 'Dreamy Female', apiDesc: 'A soft, ethereal female voice with a slow, floating quality and gentle breathiness', icon: '☁️', tag: 'character' },
+    { id: 'velvet', name: 'Velvet Female', apiDesc: 'A rich, smooth female voice with a low, luxurious tone like dark chocolate', icon: '🍫', tag: 'character' },
+    { id: 'mysterious-m', name: 'Mysterious Male', apiDesc: 'A deep, enigmatic male voice with deliberate pacing and an air of secrecy', icon: '🕴️', tag: 'character' },
+    { id: 'suave', name: 'Suave Male', apiDesc: 'A smooth, elegant male voice with a refined, debonair quality', icon: '🥂', tag: 'character' },
+    { id: 'noir', name: 'Noir Male', apiDesc: 'A hardboiled, cynical male voice with a gritty, film-noir detective quality', icon: '🕵️', tag: 'character' },
+    { id: 'midnight', name: 'Late Night Male', apiDesc: 'A low, intimate male voice like a late-night FM radio host', icon: '🌃', tag: 'character' },
+    { id: 'whisper-m', name: 'Whisper Male', apiDesc: 'A soft, intimate male voice with a hushed, ASMR-like whisper quality', icon: '🤫', tag: 'character' },
+    { id: 'angel', name: 'Ethereal Female', apiDesc: 'A heavenly, reverb-like female voice with a divine, otherworldly quality', icon: '👼', tag: 'character' },
+    { id: 'robot', name: 'Robotic Voice', apiDesc: 'A synthetic, monotone robotic voice with metallic undertones and staccato rhythm', icon: '🤖', tag: 'character' },
+    { id: 'pirate', name: 'Pirate Male', apiDesc: 'A rough, boisterous male voice with a theatrical pirate accent and gravelly tone', icon: '🏴‍☠️', tag: 'character' },
+    // ═══════════════ Accent — Regional accents ═══════════════
+    { id: 'aussie-f', name: 'Australian Female', apiDesc: 'A friendly, warm female voice with a clear Australian accent', icon: '🇦🇺', tag: 'accent' },
+    { id: 'aussie-m', name: 'Australian Male', apiDesc: 'A laid-back, matey male voice with a broad Australian accent', icon: '🦘', tag: 'accent' },
+    { id: 'brit-f', name: 'British Female', apiDesc: 'A refined, polished female voice with a posh British RP accent', icon: '🇬🇧', tag: 'accent' },
+    { id: 'brit-m', name: 'British Male', apiDesc: 'A distinguished, eloquent male voice with a classic British accent', icon: '🎩', tag: 'accent' },
+    { id: 'irish-f', name: 'Irish Female', apiDesc: 'A warm, melodic female voice with a soft Irish lilt', icon: '☘️', tag: 'accent' },
+    { id: 'irish-m', name: 'Irish Male', apiDesc: 'A friendly, storytelling male voice with a charming Irish accent', icon: '🍀', tag: 'accent' },
+    { id: 'scottish-m', name: 'Scottish Male', apiDesc: 'A rich, brogue male voice with a strong Scottish Highland accent', icon: '🏴󠁧󠁢󠁳󠁣󠁴󠁿', tag: 'accent' },
+    { id: 'southern-f', name: 'Southern US Female', apiDesc: 'A sweet, drawling female voice with a gentle Southern American accent', icon: '🌵', tag: 'accent' },
+    { id: 'southern-m', name: 'Southern US Male', apiDesc: 'A smooth, country male voice with a warm Southern drawl', icon: '🤠', tag: 'accent' },
+    { id: 'french-f', name: 'French Female', apiDesc: 'An elegant, sophisticated female voice with a French accent', icon: '🇫🇷', tag: 'accent' },
+    { id: 'french-m', name: 'French Male', apiDesc: 'A smooth, charming male voice with a Parisian French accent', icon: '🥐', tag: 'accent' },
+    { id: 'indian-f', name: 'Indian Female', apiDesc: 'A clear, melodic female voice with an Indian English accent', icon: '🇮🇳', tag: 'accent' },
+    { id: 'indian-m', name: 'Indian Male', apiDesc: 'A warm, articulate male voice with an Indian English accent', icon: '🕉️', tag: 'accent' },
+    { id: 'japanese-f', name: 'Japanese Female', apiDesc: 'A soft, polite female voice with a Japanese-accented English', icon: '🇯🇵', tag: 'accent' },
+    { id: 'elderly-m', name: 'Elderly Male', apiDesc: 'A gravelly, wise elderly male voice, age 70+, with a slow, measured cadence', icon: '👴', tag: 'accent' },
+    { id: 'teen-f', name: 'Teenage Girl', apiDesc: 'A teenage female voice, age 15-17, with casual slang and vocal fry', icon: '💁‍♀️', tag: 'accent' },
+    { id: 'teen-m', name: 'Teenage Boy', apiDesc: 'A teenage male voice, age 15-17, with a cracking, energetic quality', icon: '🤙', tag: 'accent' },
+    // ═══════════════ Use Cases ═══════════════
+    { id: 'meditation', name: 'Meditation Guide', apiDesc: 'A slow, deeply calming voice with long pauses and a hypnotic, meditative rhythm', icon: '🧘', tag: 'character' },
+    { id: 'game-narrator', name: 'Game Narrator', apiDesc: 'An epic, dramatic male voice with fantasy-game gravitas and booming resonance', icon: '⚔️', tag: 'character' },
+    { id: 'axel2', name: 'Sophisticated Male', apiDesc: 'A refined, cultured male voice with British-like diction', icon: '🎩', tag: 'professional' },
+    { id: 'echo2', name: 'Resonant Male', apiDesc: 'A rich, resonant male voice with deep bass undertones', icon: '🎶', tag: 'character' },
+    { id: 'sage2', name: 'Calm Male', apiDesc: 'A peaceful, meditative male voice with slow, steady pacing', icon: '🧘', tag: 'conversational' },
+    { id: 'ember2', name: 'Expressive Male', apiDesc: 'An animated, emotionally rich male voice with dynamic range', icon: '🎭', tag: 'expressive' },
+  ];
+
+  let apiKey = sessionStorage.getItem('mimo_api_key') || '';
+  let apiRegion = sessionStorage.getItem('mimo_api_region') || 'sgp';
+  let selectedVoice = VOICES[0];
+  let currentFilter = 'all';
+  let currentMode = 'design';
+  let isDark = true;
+  let audioEl = null;
+  let audioBlobUrl = null;
+  let audioBlob = null;
+  let pendingBlobUrl = null; // Audio waiting to switch to
+  let pendingBlob = null;
+  let abortController = null;
+  let isGenerating = false;
+  let isTimedOut = false;
+  let cloneAudioDataUrl = null;
+  let cloneAudioName = null;
+  let cloneAudioFormat = 'wav';
+  let mediaRecorder = null;
+  let audioChunks = [];
+  let isRecording = false;
+  let progressInterval = null;
+  let generationId = 0;
+  let recordingStartTime = 0;
+  let recordingTimerInterval = null;
+
+  // DOM element cache
+  const $ = Object.create(null);
+  function cacheDom() {
+    $.text = document.getElementById('textInput');
+    $.charCount = document.getElementById('charCount');
+    $.voiceList = document.getElementById('voiceList');
+    $.voiceCount = document.getElementById('voiceCount');
+    $.voiceEmpty = document.getElementById('voiceEmpty');
+    $.playIcon = document.getElementById('playIcon');
+    $.playBtn = document.getElementById('playBtn');
+    $.progBar = document.getElementById('progBar');
+    $.progFill = document.getElementById('progFill');
+    $.curTime = document.getElementById('curTime');
+    $.durTime = document.getElementById('durTime');
+    $.genBtn = document.getElementById('genBtn');
+    $.genBtnLabel = document.getElementById('genBtnLabel');
+    $.genStatus = document.getElementById('genStatus');
+    $.estTime = document.getElementById('estTime');
+    $.snackbar = document.getElementById('snackbar');
+    $.snackbarMsg = document.getElementById('snackbarMsg');
+    $.recordBtn = document.getElementById('recordBtn');
+    $.recordLabel = document.getElementById('recordLabel');
+    $.recordTimer = document.getElementById('recordTimer');
+  }
+
+  // Intl.NumberFormat cache
+  const numberFormatter = new Intl.NumberFormat('en-US');
+
+  // Voice lookup map
+  const voiceById = new Map();
+  const voiceItemMap = new Map();
+
+  // ════════════════════════════════════════════════════════════════
+  // INIT
+  // ════════════════════════════════════════════════════════════════
+  document.addEventListener('DOMContentLoaded', () => {
+    cacheDom();
+    audioEl = new Audio();
+    audioEl.addEventListener('ended', () => {
+      document.getElementById('playIcon').innerHTML = '<polygon points="6 3 20 12 6 21"/>';
+      stopProgress();
+    });
+    audioEl.addEventListener('loadedmetadata', () => {
+      document.getElementById('durTime').textContent = formatTime(audioEl.duration);
+    });
+
+    initVoiceList();
+    updateThemeLabel();
+    updateVoicePreview();
+
+    document.getElementById('textInput').addEventListener('input', function() {
+      document.getElementById('charCount').textContent = numberFormatter.format(this.value.length);
+    });
+
+    // Keyboard shortcut: Cmd/Ctrl + Enter to generate
+    document.addEventListener('keydown', e => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        generate();
+      }
+      const modal = document.getElementById('settingsModal');
+      if (e.key === 'Escape' && modal.classList.contains('open')) {
+        closeSettings();
+        return;
+      }
+      // Focus trap in settings modal
+      if (modal.classList.contains('open') && e.key === 'Tab') {
+        const focusable = modal.querySelectorAll('input, button, [tabindex]:not([tabindex="-1"])');
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      }
+    });
+
+    // Drag-to-seek (mouse + touch)
+    const bar = document.getElementById('progBar');
+    let isSeeking = false;
+    bar.addEventListener('mousedown', (e) => {
+      if (!audioEl || !audioEl.src) return;
+      isSeeking = true;
+      seekTo(e);
+    });
+    bar.addEventListener('touchstart', (e) => {
+      if (!audioEl || !audioEl.src) return;
+      isSeeking = true;
+      seekTo(e);
+    }, { passive: true });
+    document.addEventListener('mousemove', (e) => { if (isSeeking) seekTo(e); });
+    document.addEventListener('touchmove', (e) => { if (isSeeking) seekTo(e); }, { passive: true });
+    document.addEventListener('mouseup', () => { isSeeking = false; });
+    document.addEventListener('touchend', () => { isSeeking = false; });
+
+    // Drag-and-drop for upload zone
+    const uploadZone = document.getElementById('uploadZone');
+    if (uploadZone) {
+      uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+      uploadZone.addEventListener('dragleave', () => { uploadZone.classList.remove('drag-over'); });
+      uploadZone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadZone.classList.remove('drag-over');
+        const file = e.dataTransfer.files[0];
+        if (file) processAudioFile(file);
+      });
+    }
+
+    if (!apiKey) setTimeout(() => openSettings(), 500);
+
+    // Resize handle (supports mouse and touch/pointer)
+    const handle = document.getElementById('resizeHandle');
+    const rightPanel = document.getElementById('rightPanel');
+    const mainEl = document.querySelector('.main');
+    let resizing = false;
+    function onResizeStart(e) {
+      e.preventDefault();
+      resizing = true;
+      handle.classList.add('dragging');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    }
+    function onResizeMove(e) {
+      if (!resizing) return;
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const mainRect = mainEl.getBoundingClientRect();
+      const newWidth = mainRect.right - clientX;
+      const clamped = Math.min(Math.max(newWidth, CONFIG.MIN_PANEL_WIDTH), mainRect.width * 0.6);
+      rightPanel.style.width = clamped + 'px';
+    }
+    function onResizeEnd() {
+      if (!resizing) return;
+      resizing = false;
+      handle.classList.remove('dragging');
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    }
+    handle.addEventListener('mousedown', onResizeStart);
+    handle.addEventListener('touchstart', onResizeStart, { passive: false });
+    document.addEventListener('mousemove', onResizeMove);
+    document.addEventListener('touchmove', onResizeMove, { passive: false });
+    document.addEventListener('mouseup', onResizeEnd);
+    document.addEventListener('touchend', onResizeEnd);
+
+    // Cleanup on unload
+    window.addEventListener('beforeunload', () => {
+      stopProgress();
+      if (abortController) abortController.abort();
+      if (isRecording) stopRecording();
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════════
+  // THEME
+  // ════════════════════════════════════════════════════════════════
+  function toggleTheme() {
+    isDark = !isDark;
+    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+    localStorage.setItem('mimo_theme', isDark ? 'dark' : 'light');
+    updateThemeLabel();
+  }
+  function updateThemeLabel() {
+    const btn = document.getElementById('themeToggle');
+    btn.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+    btn.setAttribute('title', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+  }
+  (function() {
+    const saved = localStorage.getItem('mimo_theme');
+    if (saved === 'light') { isDark = false; document.documentElement.setAttribute('data-theme', 'light'); }
+    else if (!saved && window.matchMedia('(prefers-color-scheme: light)').matches) { isDark = false; document.documentElement.setAttribute('data-theme', 'light'); }
+  })();
+
+  // ════════════════════════════════════════════════════════════════
+  // VOICE LIST
+  // ════════════════════════════════════════════════════════════════
+  function setFilter(tag) {
+    currentFilter = tag;
+    document.querySelectorAll('.filter-chip').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.tag === tag);
+    });
+    filterVoices();
+  }
+
+  let filterDebounce = null;
+  function filterVoices() {
+    clearTimeout(filterDebounce);
+    filterDebounce = setTimeout(() => {
+      const query = document.getElementById('voiceSearch').value.toLowerCase().trim();
+      let visibleCount = 0;
+
+      voiceItemMap.forEach((el, id) => {
+        const voice = voiceById.get(id);
+        if (!voice) return;
+
+        let show = true;
+        if (currentFilter !== 'all' && voice.tag !== currentFilter) show = false;
+        if (query && !voice.name.toLowerCase().includes(query) && !voice.apiDesc.toLowerCase().includes(query)) show = false;
+
+        el.style.display = show ? '' : 'none';
+        if (show) visibleCount++;
+      });
+
+      $.voiceCount.textContent = visibleCount;
+      $.voiceEmpty.style.display = visibleCount === 0 ? '' : 'none';
+    }, CONFIG.FILTER_DEBOUNCE_MS);
+  }
+
+  function initVoiceList() {
+    const list = $.voiceList;
+    const fragment = document.createDocumentFragment();
+
+    // Build voice lookup maps
+    VOICES.forEach(v => voiceById.set(v.id, v));
+
+    VOICES.forEach(v => {
+      const div = document.createElement('div');
+      div.className = 'voice-item' + (v.id === selectedVoice.id ? ' selected' : '');
+      div.dataset.voiceId = v.id;
+      div.setAttribute('role', 'radio');
+      div.setAttribute('tabindex', v.id === selectedVoice.id ? '0' : '-1');
+      div.setAttribute('aria-checked', v.id === selectedVoice.id);
+      div.title = v.apiDesc;
+
+      const icon = document.createElement('span');
+      icon.className = 'voice-item-icon';
+      icon.setAttribute('aria-hidden', 'true');
+      icon.textContent = v.icon;
+      div.appendChild(icon);
+
+      const info = document.createElement('div');
+      info.className = 'voice-item-info';
+
+      const name = document.createElement('div');
+      name.className = 'voice-item-name';
+      name.textContent = v.name;
+      info.appendChild(name);
+
+      const desc = document.createElement('div');
+      desc.className = 'voice-item-desc';
+      desc.textContent = v.apiDesc;
+      info.appendChild(desc);
+
+      div.appendChild(info);
+
+      const previewBtn = document.createElement('button');
+      previewBtn.className = 'voice-preview-btn';
+      previewBtn.title = 'Preview this voice';
+      previewBtn.setAttribute('aria-label', 'Preview ' + v.name);
+      previewBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21"/></svg>';
+      div.appendChild(previewBtn);
+
+      fragment.appendChild(div);
+      voiceItemMap.set(v.id, div);
+    });
+
+    // Empty state
+    const empty = document.createElement('div');
+    empty.id = 'voiceEmpty';
+    empty.style.cssText = 'display:none;padding:24px 16px;text-align:center;color:var(--text-dim);font-size:13px;';
+    empty.textContent = 'No voices match your search';
+    fragment.appendChild(empty);
+    $.voiceEmpty = empty;
+
+    list.appendChild(fragment);
+    $.voiceCount.textContent = VOICES.length;
+
+    // Event delegation for voice list
+    list.addEventListener('click', (e) => {
+      const previewBtn = e.target.closest('.voice-preview-btn');
+      if (previewBtn) {
+        e.stopPropagation();
+        const item = previewBtn.closest('.voice-item');
+        if (item) previewVoice(item.dataset.voiceId);
+        return;
+      }
+      const item = e.target.closest('.voice-item');
+      if (item) selectVoice(item.dataset.voiceId);
+    });
+
+    list.addEventListener('keydown', (e) => {
+      const item = e.target.closest('.voice-item');
+      if (!item) return;
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        const previewBtn = e.target.closest('.voice-preview-btn');
+        if (previewBtn) {
+          e.stopPropagation();
+          previewVoice(item.dataset.voiceId);
+        } else {
+          selectVoice(item.dataset.voiceId);
+        }
+      }
+    });
+  }
+
+  function handleVoiceListKeydown(e) {
+    const items = [...voiceItemMap.values()];
+    if (!items.length) return;
+    const current = document.activeElement;
+    const idx = items.indexOf(current);
+    if (idx === -1) return;
+
+    let next = -1;
+    if (e.key === 'ArrowDown') { e.preventDefault(); next = idx + 1 < items.length ? idx + 1 : 0; }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); next = idx - 1 >= 0 ? idx - 1 : items.length - 1; }
+
+    if (next !== -1) {
+      items.forEach((item, i) => item.setAttribute('tabindex', i === next ? '0' : '-1'));
+      items[next].focus();
+    }
+  }
+
+  function selectVoice(id) {
+    if (isGenerating) return showSnackbar('Voice locked during generation.', 'info');
+    const found = VOICES.find(v => v.id === id);
+    if (!found) return;
+    // Toggle selection classes instead of full re-render
+    const prev = document.querySelector('.voice-item.selected');
+    if (prev) { prev.classList.remove('selected'); prev.setAttribute('aria-checked', 'false'); prev.setAttribute('tabindex', '-1'); }
+    selectedVoice = found;
+    const next = document.querySelector(`.voice-item[data-voice-id="${id}"]`);
+    if (next) { next.classList.add('selected'); next.setAttribute('aria-checked', 'true'); next.setAttribute('tabindex', '0'); }
+    // Update preview panel
+    updateVoicePreview();
+  }
+
+  function updateVoicePreview() {
+    document.getElementById('previewIcon').textContent = selectedVoice.icon;
+    document.getElementById('previewName').textContent = selectedVoice.name;
+    document.getElementById('previewDesc').value = selectedVoice.apiDesc;
+  }
+
+  function resetVoiceDesc() {
+    document.getElementById('previewDesc').value = selectedVoice.apiDesc;
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // RANDOM VOICE
+  // ════════════════════════════════════════════════════════════════
+  const RANDOM_POOL = {
+    gender: ['female', 'male'],
+    age: ['young', 'middle-aged', 'elderly'],
+    accent: ['Australian', 'British', 'Indian', 'French', 'Irish', 'American', 'Scottish', 'Southern US', 'Japanese'],
+    tone: ['warm', 'deep', 'bright', 'soft', 'gravelly', 'smooth', 'husky', 'rich', 'velvety'],
+    emotion: ['calm', 'friendly', 'energetic', 'mysterious', 'authoritative', 'playful', 'romantic', 'intense', 'gentle'],
+    pace: ['conversational', 'slow', 'fast', 'measured', 'relaxed', 'upbeat'],
+  };
+
+  function randomFrom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+  function generateRandomDesc() {
+    const gender = randomFrom(RANDOM_POOL.gender);
+    const age = randomFrom(RANDOM_POOL.age);
+    const accent = randomFrom(RANDOM_POOL.accent);
+    const tone = randomFrom(RANDOM_POOL.tone);
+    const emotion = randomFrom(RANDOM_POOL.emotion);
+    const pace = randomFrom(RANDOM_POOL.pace);
+    return `A ${age} ${accent} ${gender} voice with a ${tone} tone, ${emotion} and ${pace} pace`;
+  }
+
+  let lastRandomDesc = '';
+
+  function randomiseVoice() {
+    const btn = document.getElementById('randomBtn');
+    const textarea = document.getElementById('previewDesc');
+    const prev = textarea.value;
+    btn.classList.add('spinning');
+    setTimeout(() => btn.classList.remove('spinning'), 500);
+    const newDesc = generateRandomDesc();
+    textarea.value = newDesc;
+    textarea.classList.add('flash');
+    setTimeout(() => textarea.classList.remove('flash'), 600);
+    lastRandomDesc = prev;
+    showSnackbar('🎲 Random voice generated', 'info', { undo: undoRandom });
+  }
+
+  function undoRandom() {
+    const textarea = document.getElementById('previewDesc');
+    if (lastRandomDesc) { textarea.value = lastRandomDesc; lastRandomDesc = ''; }
+    hideSnackbar();
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // VOICE PREVIEW (per-voice play button)
+  // ════════════════════════════════════════════════════════════════
+  let previewingVoiceId = null;
+  let previewAbortController = null;
+  let previewAudioEl = null;
+  let previewBlobUrl = null;
+
+  function stopPreview() {
+    if (previewAudioEl) {
+      previewAudioEl.pause();
+      previewAudioEl.src = '';
+      previewAudioEl = null;
+    }
+    if (previewBlobUrl) {
+      URL.revokeObjectURL(previewBlobUrl);
+      previewBlobUrl = null;
+    }
+    // Reset all preview buttons to play icon
+    document.querySelectorAll('.voice-preview-btn').forEach(b => {
+      b.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21"/></svg>';
+      b.classList.remove('playing');
+    });
+    previewingVoiceId = null;
+  }
+
+  function setPreviewBtnState(btn, playing) {
+    if (!btn) return;
+    if (playing) {
+      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>';
+      btn.classList.add('playing');
+    } else {
+      btn.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21"/></svg>';
+      btn.classList.remove('playing');
+    }
+  }
+
+  async function previewVoice(voiceId) {
+    if (!apiKey) return showSnackbar('Add your API key in Settings.', 'error');
+
+    const voice = VOICES.find(v => v.id === voiceId);
+    if (!voice) return;
+
+    const btn = document.querySelector(`.voice-item[data-voice-id="${voiceId}"] .voice-preview-btn`);
+
+    // Toggle: if same voice is playing, stop it
+    if (previewingVoiceId === voiceId && previewAudioEl && !previewAudioEl.paused) {
+      stopPreview();
+      return;
+    }
+
+    // Auto-stop: if different voice is playing, stop it first
+    stopPreview();
+
+    // Cancel any in-flight preview request
+    if (previewAbortController) previewAbortController.abort();
+
+    // Stop main player if playing
+    if (audioEl && !audioEl.paused) { audioEl.pause(); stopProgress(); }
+
+    if (btn) btn.classList.add('loading');
+    previewingVoiceId = voiceId;
+
+    try {
+      const url = API_ENDPOINTS[apiRegion] || API_ENDPOINTS.sgp;
+      const body = {
+        model: 'mimo-v2.5-tts-voicedesign',
+        messages: [
+          { role: 'user', content: voice.apiDesc },
+          { role: 'assistant', content: voice.apiDesc },
+        ],
+        audio: { format: 'wav' },
+      };
+
+      const controller = new AbortController();
+      previewAbortController = controller;
+      const timeoutId = setTimeout(() => controller.abort(), CONFIG.REQUEST_TIMEOUT_MS);
+
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + apiKey,
+          'api-key': apiKey,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!resp.ok) {
+        const errData = await resp.json().catch(() => ({}));
+        throw new Error(errData?.error?.message || 'Preview failed');
+      }
+
+      const data = await resp.json();
+      const audioData = data?.choices?.[0]?.message?.audio?.data;
+      if (typeof audioData !== 'string' || !audioData) throw new Error('No audio returned');
+
+      let blob;
+      try {
+        const binary = atob(audioData);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        blob = new Blob([bytes], { type: 'audio/wav' });
+      } catch (e) {
+        throw new Error('Invalid audio data from server. Try again.');
+      }
+      previewBlobUrl = URL.createObjectURL(blob);
+
+      // Play preview
+      previewAudioEl = new Audio(previewBlobUrl);
+      previewAudioEl.onended = () => { setPreviewBtnState(btn, false); stopPreview(); };
+      previewAudioEl.onerror = () => { setPreviewBtnState(btn, false); stopPreview(); };
+      setPreviewBtnState(btn, true);
+      previewAudioEl.play().catch(() => {
+        showSnackbar('Could not play preview.', 'error');
+        setPreviewBtnState(btn, false);
+      });
+    } catch (e) {
+      if (e.name === 'AbortError') return;
+      showSnackbar('Preview failed: ' + e.message, 'error');
+    } finally {
+      previewAbortController = null;
+      if (btn) btn.classList.remove('loading');
+    }
+  }
+
+  function getVoiceDescription() {
+    const edited = document.getElementById('previewDesc').value.trim();
+    return edited || selectedVoice.apiDesc;
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // MODE TOGGLE
+  // ════════════════════════════════════════════════════════════════
+  function setMode(mode) {
+    currentMode = mode;
+    document.getElementById('modeDesign').classList.toggle('active', mode === 'design');
+    document.getElementById('modeClone').classList.toggle('active', mode === 'clone');
+    document.getElementById('panelDesign').style.display = mode === 'design' ? '' : 'none';
+    document.getElementById('panelClone').style.display = mode === 'clone' ? '' : 'none';
+    document.getElementById('voicePreview').style.display = mode === 'design' ? '' : 'none';
+    if (!isGenerating) setGenBtnReady();
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // FILE UPLOAD
+  // ════════════════════════════════════════════════════════════════
+  function handleFileUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    processAudioFile(file);
+  }
+
+  // Reuse a single AudioContext for all WAV conversions
+  let sharedAudioCtx = null;
+  function getAudioCtx() {
+    if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
+      sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    if (sharedAudioCtx.state === 'suspended') {
+      sharedAudioCtx.resume();
+    }
+    return sharedAudioCtx;
+  }
+
+  // Convert any audio to WAV using Web Audio API
+  async function convertToWav(audioBuffer) {
+    try {
+      const numChannels = audioBuffer.numberOfChannels;
+      const sampleRate = audioBuffer.sampleRate;
+      const length = audioBuffer.length;
+      const bytesPerSample = 2; // 16-bit
+      const dataSize = length * numChannels * bytesPerSample;
+      const buffer = new ArrayBuffer(44 + dataSize);
+      const view = new DataView(buffer);
+
+      // WAV header
+      writeString(view, 0, 'RIFF');
+      view.setUint32(4, 36 + dataSize, true);
+      writeString(view, 8, 'WAVE');
+      writeString(view, 12, 'fmt ');
+      view.setUint32(16, 16, true); // chunk size
+      view.setUint16(20, 1, true);  // PCM
+      view.setUint16(22, numChannels, true);
+      view.setUint32(24, sampleRate, true);
+      view.setUint32(28, sampleRate * numChannels * bytesPerSample, true);
+      view.setUint16(32, numChannels * bytesPerSample, true);
+      view.setUint16(34, 16, true); // bits per sample
+      writeString(view, 36, 'data');
+      view.setUint32(40, dataSize, true);
+
+      // Interleave channels and write PCM samples
+      const channels = [];
+      for (let ch = 0; ch < numChannels; ch++) channels.push(audioBuffer.getChannelData(ch));
+
+      let offset = 44;
+      for (let i = 0; i < length; i++) {
+        for (let ch = 0; ch < numChannels; ch++) {
+          const sample = Math.max(-1, Math.min(1, channels[ch][i]));
+          view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+          offset += 2;
+        }
+      }
+
+      return new Blob([buffer], { type: 'audio/wav' });
+    } finally {
+      // Don't close — reuse shared context
+    }
+  }
+
+  function writeString(view, offset, str) {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  }
+
+  async function processAudioFile(file) {
+    const validTypes = ['audio/mpeg', 'audio/wav', 'audio/mp3', 'audio/webm', 'audio/ogg', 'audio/mp4', 'audio/x-m4a'];
+    const validExts = ['.mp3', '.wav', '.webm', '.ogg', '.m4a'];
+    const ext = '.' + file.name.split('.').pop().toLowerCase();
+
+    if (!validTypes.includes(file.type) && !validExts.includes(ext)) {
+      return showSnackbar('Unsupported audio format. Use mp3, wav, webm, ogg, or m4a.', 'error');
+    }
+
+    if (file.size > CONFIG.MAX_FILE_SIZE) {
+      return showSnackbar('Audio file too large. Use a file under 5MB.', 'error');
+    }
+
+    // Show file info immediately
+    showFileInfo(file);
+
+    try {
+      showSnackbar('Converting audio to WAV...', 'info');
+      const arrayBuffer = await file.arrayBuffer();
+
+      // Decode once — used for both duration check and WAV conversion
+      const audioCtx = getAudioCtx();
+      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+      // Update duration info
+      const duration = audioBuffer.duration;
+      const durationEl = document.getElementById('fileInfoDuration');
+      durationEl.textContent = formatTime(duration);
+
+      if (duration > CONFIG.MAX_AUDIO_DURATION_S) {
+        durationEl.classList.add('warning');
+        return showSnackbar('Audio too long. Use a file under 2 minutes.', 'error');
+      }
+
+      // Convert to WAV (pass decoded buffer directly)
+      const wavBlob = await convertToWav(audioBuffer);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const fullDataUrl = e.target.result;
+        cloneAudioDataUrl = fullDataUrl;
+        cloneAudioName = file.name;
+        cloneAudioFormat = 'wav';
+        showClonePreview(file.name, fullDataUrl);
+        hideFileInfo();
+      };
+      reader.readAsDataURL(wavBlob);
+    } catch (err) {
+      console.error('Audio conversion failed:', err);
+      showSnackbar('Failed to process audio file. ' + err.message, 'error');
+    }
+  }
+
+  function showFileInfo(file) {
+    const info = document.getElementById('fileInfo');
+    document.getElementById('fileInfoName').textContent = file.name;
+    document.getElementById('fileInfoSize').textContent = formatFileSize(file.size);
+    document.getElementById('fileInfoDuration').textContent = '...';
+    document.getElementById('fileInfoDuration').classList.remove('warning');
+    info.style.display = '';
+  }
+
+  function hideFileInfo() {
+    document.getElementById('fileInfo').style.display = 'none';
+  }
+
+  function formatFileSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function showClonePreview(name, dataUrl) {
+    document.getElementById('uploadZone').style.display = 'none';
+    document.getElementById('clonePreview').style.display = '';
+    document.getElementById('cloneAudioEl').src = dataUrl;
+    document.getElementById('cloneInfo').textContent = name;
+  }
+
+  function removeCloneAudio() {
+    cloneAudioDataUrl = null;
+    cloneAudioName = null;
+    cloneAudioFormat = 'wav';
+    document.getElementById('uploadZone').style.display = '';
+    document.getElementById('clonePreview').style.display = 'none';
+    document.getElementById('cloneAudioEl').src = '';
+    document.getElementById('fileInput').value = '';
+    hideFileInfo();
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // MICROPHONE RECORDING
+  // ════════════════════════════════════════════════════════════════
+  async function toggleRecording() {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  }
+
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream);
+      audioChunks = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunks.push(e.data);
+      };
+
+      mediaRecorder.onstop = async () => {
+        try {
+          showSnackbar('Converting recording to WAV...', 'info');
+          const rawBlob = new Blob(audioChunks, { type: mediaRecorder.mimeType });
+          const arrayBuffer = await rawBlob.arrayBuffer();
+          const audioCtx = getAudioCtx();
+          const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+          const wavBlob = await convertToWav(audioBuffer);
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const fullDataUrl = e.target.result;
+            cloneAudioDataUrl = fullDataUrl;
+            cloneAudioName = 'recording.wav';
+            cloneAudioFormat = 'wav';
+            showClonePreview('recording.wav', fullDataUrl);
+            // Recording loaded
+          };
+          reader.readAsDataURL(wavBlob);
+        } catch (err) {
+          console.error('Recording conversion failed:', err);
+          showSnackbar('Failed to process recording. ' + err.message, 'error');
+        }
+        stream.getTracks().forEach(t => t.stop());
+        audioChunks = [];
+      };
+
+      mediaRecorder.start();
+      isRecording = true;
+      document.getElementById('recordBtn').classList.add('recording');
+      document.getElementById('recordLabel').textContent = 'Stop';
+      recordingStartTime = Date.now();
+      document.getElementById('recordTimer').style.display = '';
+      recordingTimerInterval = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+        const m = Math.floor(elapsed / 60);
+        const s = elapsed % 60;
+        document.getElementById('recordTimer').textContent = m + ':' + (s < 10 ? '0' : '') + s;
+      }, 1000);
+    } catch (err) {
+      showSnackbar('Microphone access denied. Allow microphone access and try again.', 'error');
+    }
+  }
+
+  function stopRecording() {
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      mediaRecorder.stop();
+    }
+    isRecording = false;
+    document.getElementById('recordBtn').classList.remove('recording');
+    document.getElementById('recordLabel').textContent = 'Record';
+    clearInterval(recordingTimerInterval);
+    document.getElementById('recordTimer').style.display = 'none';
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // GENERATE
+  // ════════════════════════════════════════════════════════════════
+  function buildRequestBody(text) {
+    if (currentMode === 'clone') {
+      return {
+        model: 'mimo-v2.5-tts-voiceclone',
+        messages: [
+          { role: 'user', content: 'Clone this voice' },
+          { role: 'assistant', content: text },
+        ],
+        audio: { voice: cloneAudioDataUrl, format: cloneAudioFormat },
+      };
+    }
+    return {
+      model: 'mimo-v2.5-tts-voicedesign',
+      messages: [
+        { role: 'user', content: getVoiceDescription() },
+        { role: 'assistant', content: text },
+      ],
+      audio: { format: 'wav' },
+    };
+  }
+
+  async function handleApiError(resp) {
+    const status = resp.status;
+    let msg;
+    try {
+      const errData = await resp.json();
+      msg = errData?.error?.message || JSON.stringify(errData);
+      console.error('API Error Response:', JSON.stringify(errData));
+    } catch(e) {
+      msg = await resp.text().catch(() => 'No details');
+      console.error('API Error Text:', msg);
+    }
+    console.error('API Error:', status, msg);
+    if (status === 401 || status === 403) msg = 'API key rejected. Check your key in API Settings.';
+    else if (status === 429) msg = 'Rate limit hit. Try again in a minute.';
+    else if (status >= 500) msg = 'Server error. Try again later.';
+    else msg = 'Error (' + status + '): ' + msg;
+    throw new Error(msg);
+  }
+
+  function loadAudioFromResponse(audioData) {
+    if (typeof audioData !== 'string' || !audioData) throw new Error('The server returned no audio. Try different text or a shorter passage.');
+    try {
+      const binary = atob(audioData);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      return new Blob([bytes], { type: 'audio/wav' });
+    } catch (e) {
+      throw new Error('Invalid audio data from server. Try again.');
+    }
+  }
+
+  function setGenBtnReady() {
+    const btn = document.getElementById('genBtn');
+    const btnLabel = document.getElementById('genBtnLabel');
+    btn.classList.remove('cancel', 'loading');
+    btnLabel.textContent = 'Generate';
+    btn.onclick = () => generate();
+  }
+
+  function cancelGeneration() {
+    if (abortController) abortController.abort();
+    const btn = document.getElementById('genBtn');
+    const btnLabel = document.getElementById('genBtnLabel');
+    const estEl = document.getElementById('estTime');
+    btn.classList.remove('cancel', 'loading');
+    btnLabel.textContent = 'Generate';
+    btn.onclick = () => generate();
+    estEl.textContent = '';
+    isGenerating = false;
+    isTimedOut = false;
+    document.getElementById('genStatus').textContent = 'Generation cancelled.';
+  }
+
+  async function generate() {
+    // Guard against double-click
+    if (isGenerating) return;
+
+    const text = document.getElementById('textInput').value.trim();
+    if (!text) return showSnackbar('Enter text to generate speech.', 'error');
+    if (!apiKey) return showSnackbar('Add your API key in Settings.', 'error');
+    if (currentMode === 'clone' && !cloneAudioDataUrl) return showSnackbar('Add a voice sample to clone.', 'error');
+
+    // Cancel any in-flight request
+    if (abortController) abortController.abort();
+    const thisGen = ++generationId;
+
+    const btn = document.getElementById('genBtn');
+    const btnLabel = document.getElementById('genBtnLabel');
+    btnLabel.textContent = currentMode === 'clone' ? 'Cloning' : 'Designing';
+    btn.classList.remove('loading');
+    btn.classList.add('cancel');
+    btn.onclick = () => cancelGeneration();
+    isGenerating = true;
+    isTimedOut = false;
+    document.getElementById('genStatus').textContent = 'Generating speech...';
+
+    // Show estimated time
+    const estEl = document.getElementById('estTime');
+    let minSeconds, maxSeconds;
+    if (currentMode === 'clone') {
+      // Clone: high variability (12-77s observed), range based on text length
+      minSeconds = Math.max(10, Math.round(text.length / 20));
+      maxSeconds = Math.max(30, Math.round(text.length / 5) + 15);
+    } else {
+      // Design: more predictable
+      minSeconds = Math.max(2, Math.round(text.length / 50));
+      maxSeconds = Math.max(5, Math.round(text.length / 25) + 3);
+    }
+    estEl.textContent = `${minSeconds}-${maxSeconds}s estimated`;
+    const estStart = Date.now();
+    const estInterval = setInterval(() => {
+      const elapsed = Math.round((Date.now() - estStart) / 1000);
+      if (elapsed > maxSeconds) {
+        estEl.textContent = `${elapsed}s elapsed (usually ${minSeconds}-${maxSeconds}s)`;
+      } else {
+        estEl.textContent = `${elapsed}s elapsed...`;
+      }
+    }, 1000);
+
+    try {
+      const url = API_ENDPOINTS[apiRegion] || API_ENDPOINTS.sgp;
+      const body = buildRequestBody(text);
+
+      const controller = new AbortController();
+      abortController = controller;
+      const timeoutId = setTimeout(() => { isTimedOut = true; controller.abort(); }, CONFIG.REQUEST_TIMEOUT_MS);
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + apiKey,
+          'api-key': apiKey,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!resp.ok) await handleApiError(resp);
+
+      const data = await resp.json();
+      const audioData = data?.choices?.[0]?.message?.audio?.data;
+      const newBlob = loadAudioFromResponse(audioData);
+      const newBlobUrl = URL.createObjectURL(newBlob);
+
+      // If audio is currently playing, store as pending instead of replacing
+      if (!audioEl.paused && !audioEl.ended) {
+        // Revoke old pending if exists
+        if (pendingBlobUrl) URL.revokeObjectURL(pendingBlobUrl);
+        pendingBlob = newBlob;
+        pendingBlobUrl = newBlobUrl;
+        showSnackbar('New audio ready — press play to switch.', 'success');
+      } else {
+        // Not playing — replace as normal
+        if (audioBlobUrl) URL.revokeObjectURL(audioBlobUrl);
+        audioBlob = newBlob;
+        audioBlobUrl = newBlobUrl;
+        audioEl.src = audioBlobUrl;
+        document.getElementById('playIcon').innerHTML = '<polygon points="6 3 20 12 6 21"/>';
+        document.getElementById('curTime').textContent = '0:00';
+        document.getElementById('durTime').textContent = '0:00';
+        document.getElementById('progFill').style.width = '0%';
+      }
+
+      // Button goes back to ready
+      clearInterval(estInterval);
+      setGenBtnReady();
+      estEl.textContent = '';
+      document.getElementById('genStatus').textContent = 'Speech generated successfully.';
+    } catch (e) {
+      clearInterval(estInterval);
+      if (e.name === 'AbortError') {
+        if (isTimedOut) {
+          showSnackbar('Request timed out. Try shorter text or check your connection.', 'error');
+        }
+        setGenBtnReady();
+        estEl.textContent = '';
+        return;
+      }
+      console.error(e);
+      showSnackbar('Error: ' + e.message, 'error');
+      setGenBtnReady();
+      estEl.textContent = '';
+    } finally {
+      abortController = null;
+      isGenerating = false;
+      isTimedOut = false;
+      btn.classList.remove('loading');
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // PLAYER
+  // ════════════════════════════════════════════════════════════════
+  function togglePlay() {
+    if (!audioEl || !audioEl.src) return;
+    if (audioEl.paused || audioEl.ended) {
+      // If there's pending audio, switch to it first
+      if (pendingBlobUrl) {
+        switchToPending();
+        return;
+      }
+      audioEl.play().catch(() => showSnackbar('Could not play audio. Try again.', 'error'));
+      document.getElementById('playIcon').innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
+      document.getElementById('playBtn').setAttribute('aria-label', 'Pause');
+      startProgress();
+    } else {
+      audioEl.pause();
+      document.getElementById('playIcon').innerHTML = '<polygon points="6 3 20 12 6 21"/>';
+      document.getElementById('playBtn').setAttribute('aria-label', 'Play');
+      stopProgress();
+    }
+  }
+
+  function switchToPending() {
+    if (!pendingBlobUrl) return;
+    // Stop current playback
+    audioEl.pause();
+    stopProgress();
+    // Swap to pending
+    if (audioBlobUrl) URL.revokeObjectURL(audioBlobUrl);
+    audioBlob = pendingBlob;
+    audioBlobUrl = pendingBlobUrl;
+    pendingBlob = null;
+    pendingBlobUrl = null;
+    audioEl.src = audioBlobUrl;
+    audioEl.currentTime = 0;
+    // Reset UI
+    document.getElementById('playIcon').innerHTML = '<polygon points="6 3 20 12 6 21"/>';
+    document.getElementById('curTime').textContent = '0:00';
+    document.getElementById('durTime').textContent = '0:00';
+    document.getElementById('progFill').style.width = '0%';
+    document.getElementById('genStatus').textContent = 'Switched to new audio.';
+    // Play the new audio
+    audioEl.play().catch(() => showSnackbar('Could not play audio. Try again.', 'error'));
+    document.getElementById('playIcon').innerHTML = '<rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>';
+    document.getElementById('playBtn').setAttribute('aria-label', 'Pause');
+    startProgress();
+  }
+
+  function seekTo(e) {
+    if (!audioEl || !audioEl.src) return;
+    const bar = document.getElementById('progBar');
+    const rect = bar.getBoundingClientRect();
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
+    audioEl.currentTime = (x / rect.width) * (audioEl.duration || 0);
+  }
+
+  function startProgress() {
+    stopProgress();
+    progressInterval = setInterval(updateProgressBar, CONFIG.PROGRESS_INTERVAL_MS);
+  }
+
+  function stopProgress() {
+    if (progressInterval) { clearInterval(progressInterval); progressInterval = null; }
+  }
+
+  function updateProgressBar() {
+    if (!audioEl || !audioEl.duration) return;
+    const pct = (audioEl.currentTime / audioEl.duration) * 100;
+    $.progFill.style.width = pct + '%';
+    $.curTime.textContent = formatTime(audioEl.currentTime);
+    $.durTime.textContent = formatTime(audioEl.duration);
+    $.progBar.setAttribute('aria-valuenow', Math.round(pct));
+  }
+
+  function handleProgressKeydown(e) {
+    if (!audioEl || !audioEl.src || !audioEl.duration) return;
+    const step = 5; // seconds
+    if (e.key === 'ArrowRight') { e.preventDefault(); audioEl.currentTime = Math.min(audioEl.currentTime + step, audioEl.duration); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); audioEl.currentTime = Math.max(audioEl.currentTime - step, 0); }
+  }
+
+  function formatTime(sec) {
+    if (!sec || !isFinite(sec)) return '0:00';
+    const m = Math.floor(sec / 60);
+    const s = Math.floor(sec % 60);
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  function toggleDownloadMenu() {
+    if (!audioBlobUrl) return showSnackbar('Generate speech first.', 'error');
+    const menu = document.getElementById('dlMenu');
+    const btn = document.getElementById('dlBtn');
+    const isOpen = menu.classList.toggle('open');
+    btn.setAttribute('aria-expanded', isOpen);
+    if (isOpen) menu.querySelector('.dl-option')?.focus();
+  }
+
+  function closeDownloadMenu() {
+    const menu = document.getElementById('dlMenu');
+    const btn = document.getElementById('dlBtn');
+    menu.classList.remove('open');
+    btn.setAttribute('aria-expanded', 'false');
+  }
+
+  function handleDownloadMenuKeydown(e) {
+    const menu = document.getElementById('dlMenu');
+    const items = Array.from(menu.querySelectorAll('.dl-option'));
+    const idx = items.indexOf(document.activeElement);
+
+    if (e.key === 'Escape') { e.preventDefault(); closeDownloadMenu(); document.getElementById('dlBtn').focus(); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); items[(idx + 1) % items.length].focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); items[(idx - 1 + items.length) % items.length].focus(); }
+    else if (e.key === 'Tab') {
+      e.preventDefault();
+      if (e.shiftKey) items[items.length - 1].focus();
+      else items[0].focus();
+    }
+  }
+
+  // Close download menu when clicking outside
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.dl-wrap')) closeDownloadMenu();
+  });
+
+  async function downloadAudio(format) {
+    closeDownloadMenu();
+    if (!audioBlobUrl) return showSnackbar('Generate speech first.', 'error');
+
+    if (format === 'wav') {
+      const a = document.createElement('a');
+      a.href = audioBlobUrl;
+      a.download = 'mimo-tts-' + Date.now() + '.wav';
+      a.click();
+      return;
+    }
+
+    // MP3 conversion
+    showSnackbar('Converting to MP3...', 'info');
+    try {
+      // Lazy-load lamejs if not already loaded
+      if (typeof lamejs === 'undefined') {
+        await new Promise((resolve, reject) => {
+          const s = document.createElement('script');
+          s.src = 'https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js';
+          s.onload = resolve;
+          s.onerror = reject;
+          document.head.appendChild(s);
+        });
+      }
+      const response = await fetch(audioBlobUrl);
+      const wavBlob = await response.blob();
+      const arrayBuffer = await wavBlob.arrayBuffer();
+      const audioCtx = getAudioCtx();
+      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+      const numChannels = audioBuffer.numberOfChannels;
+      const sampleRate = audioBuffer.sampleRate;
+      const length = audioBuffer.length;
+
+      const mp3encoder = new lamejs.Mp3Encoder(numChannels, sampleRate, CONFIG.MP3_BITRATE);
+      const mp3Data = [];
+
+      const blockSize = CONFIG.MP3_BLOCK_SIZE;
+      for (let i = 0; i < length; i += blockSize) {
+        const left = new Int16Array(blockSize);
+        const right = numChannels > 1 ? new Int16Array(blockSize) : undefined;
+        const leftFloat = audioBuffer.getChannelData(0);
+        for (let j = 0; j < blockSize && i + j < length; j++) {
+          left[j] = Math.max(-32768, Math.min(32767, Math.round(leftFloat[i + j] * 32767)));
+        }
+        if (numChannels > 1) {
+          const rightFloat = audioBuffer.getChannelData(1);
+          for (let j = 0; j < blockSize && i + j < length; j++) {
+            right[j] = Math.max(-32768, Math.min(32767, Math.round(rightFloat[i + j] * 32767)));
+          }
+        }
+        const mp3buf = numChannels > 1
+          ? mp3encoder.encodeBuffer(left, right)
+          : mp3encoder.encodeBuffer(left);
+        if (mp3buf.length > 0) mp3Data.push(mp3buf);
+      }
+
+      const end = mp3encoder.flush();
+      if (end.length > 0) mp3Data.push(end);
+
+      const mp3Blob = new Blob(mp3Data, { type: 'audio/mp3' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(mp3Blob);
+      a.download = 'mimo-tts-' + Date.now() + '.mp3';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 100);
+      showSnackbar('MP3 downloaded', 'success');
+    } catch (err) {
+      console.error(err);
+      showSnackbar('MP3 conversion failed. Downloading as WAV.', 'error');
+      const a = document.createElement('a');
+      a.href = audioBlobUrl;
+      a.download = 'mimo-tts-' + Date.now() + '.wav';
+      a.click();
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // SETTINGS
+  // ════════════════════════════════════════════════════════════════
+  const ENDPOINT_LABELS = {
+    standard: 'Standard / PAYG',
+    cn: 'Token Plan — China',
+    sgp: 'Token Plan — Singapore'
+  };
+
+  let settingsTrigger = null;
+  function openSettings() {
+    settingsTrigger = document.activeElement;
+    document.getElementById('apiKeyInput').value = apiKey;
+    setDropdownValue(apiRegion);
+    document.getElementById('settingsModal').classList.add('open');
+    document.getElementById('apiKeyInput').focus();
+  }
+
+  function closeSettings() {
+    document.getElementById('settingsModal').classList.remove('open');
+    document.getElementById('apiRegionWrap').classList.remove('open');
+    if (settingsTrigger) { settingsTrigger.focus(); settingsTrigger = null; }
+  }
+
+  function saveSettings() {
+    apiKey = document.getElementById('apiKeyInput').value.trim();
+    apiRegion = document.getElementById('apiRegionWrap').dataset.value || 'sgp';
+    sessionStorage.setItem('mimo_api_key', apiKey);
+    sessionStorage.setItem('mimo_api_region', apiRegion);
+    closeSettings();
+    showSnackbar('Settings saved', 'success');
+  }
+
+  function toggleDropdown() {
+    const wrap = document.getElementById('apiRegionWrap');
+    const trigger = document.getElementById('apiRegionTrigger');
+    wrap.classList.toggle('open');
+    trigger.setAttribute('aria-expanded', wrap.classList.contains('open'));
+    if (wrap.classList.contains('open')) {
+      const selected = wrap.querySelector('.custom-select-option.selected');
+      if (selected) selected.focus();
+    }
+  }
+
+  function selectOption(value) {
+    setDropdownValue(value);
+    document.getElementById('apiRegionWrap').classList.remove('open');
+  }
+
+  function setDropdownValue(value) {
+    const wrap = document.getElementById('apiRegionWrap');
+    wrap.dataset.value = value;
+    document.getElementById('apiRegionLabel').textContent = ENDPOINT_LABELS[value] || value;
+    document.querySelectorAll('.custom-select-option').forEach(opt => {
+      opt.classList.toggle('selected', opt.dataset.value === value);
+    });
+  }
+
+  // Close dropdown when clicking outside
+  document.addEventListener('click', (e) => {
+    const wrap = document.getElementById('apiRegionWrap');
+    if (wrap && !wrap.contains(e.target)) {
+      wrap.classList.remove('open');
+    }
+  });
+
+  // ════════════════════════════════════════════════════════════════
+  // SNACKBAR
+  // ════════════════════════════════════════════════════════════════
+  let snackbarTimer = null;
+  let snackbarRemaining = 0;
+  let snackbarStart = 0;
+  function showSnackbar(msg, type, opts = {}) {
+    $.snackbarMsg.textContent = msg;
+    if (opts.undo) {
+      $.snackbarMsg.appendChild(document.createTextNode(' '));
+      const btn = document.createElement('button');
+      btn.textContent = 'Undo';
+      btn.className = 'snackbar-undo';
+      btn.onclick = opts.undo;
+      $.snackbarMsg.appendChild(btn);
+    }
+    $.snackbar.className = 'snackbar ' + (type || '') + ' show';
+    $.snackbar.setAttribute('aria-live', type === 'error' ? 'assertive' : 'polite');
+    clearTimeout(snackbarTimer);
+    const duration = type === 'error' ? 8000 : 4000;
+    snackbarRemaining = duration;
+    snackbarStart = Date.now();
+    snackbarTimer = setTimeout(() => $.snackbar.classList.remove('show'), duration);
+  }
+  function pauseSnackbar() {
+    clearTimeout(snackbarTimer);
+    snackbarRemaining -= (Date.now() - snackbarStart);
+  }
+  function resumeSnackbar() {
+    snackbarStart = Date.now();
+    snackbarTimer = setTimeout(() => document.getElementById('snackbar').classList.remove('show'), snackbarRemaining);
+  }
+  function hideSnackbar() {
+    document.getElementById('snackbar').classList.remove('show');
+    clearTimeout(snackbarTimer);
+  }
+</script>
+</body>
+</html>

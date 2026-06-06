@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Triple-Decode Benchmark — MiMo Voice Clone</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+    background: #000; color: #fff; padding: 40px 20px;
+    max-width: 700px; margin: 0 auto;
+  }
+  h1 { font-size: 20px; color: #4ade80; margin-bottom: 8px; }
+  .subtitle { font-size: 12px; color: #888; margin-bottom: 32px; }
+  .section { margin-bottom: 32px; }
+  .section h2 { font-size: 14px; color: #fff; margin-bottom: 12px; border-bottom: 1px solid #222; padding-bottom: 8px; }
+  label { display: block; font-size: 11px; color: #999; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+  input[type="file"] {
+    width: 100%; padding: 10px 12px; background: #111; border: 1px solid #222;
+    border-radius: 6px; color: #fff; font-family: inherit; font-size: 13px; margin-bottom: 12px;
+  }
+  button {
+    padding: 10px 20px; background: #4ade80; color: #000; border: none; border-radius: 6px;
+    font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; text-transform: uppercase;
+    letter-spacing: 0.5px; transition: background 0.15s;
+  }
+  button:hover { background: #22c55e; }
+  button:disabled { background: #333; color: #666; cursor: not-allowed; }
+  .results { margin-top: 24px; }
+  .result-card {
+    background: #111; border: 1px solid #222; border-radius: 8px; padding: 16px; margin-bottom: 12px;
+  }
+  .result-card h3 { font-size: 13px; color: #4ade80; margin-bottom: 8px; }
+  .result-card p { font-size: 12px; color: #999; line-height: 1.6; }
+  .result-card .time { font-size: 24px; color: #fff; font-weight: 700; margin: 8px 0; }
+  .result-card .label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+  .improvement { color: #4ade80; font-weight: 600; }
+  .hidden { display: none; }
+  .file-info { font-size: 11px; color: #888; margin-bottom: 12px; }
+  .flex { display: flex; gap: 12px; }
+  .flex > * { flex: 1; }
+</style>
+</head>
+<body>
+
+<h1>Triple-Decode Benchmark</h1>
+<p class="subtitle">Compare old (3x decode) vs new (1x decode) audio processing</p>
+
+<div class="section">
+  <h2>Setup</h2>
+  <label>Reference Audio</label>
+  <input type="file" id="audioFile" accept="audio/*" />
+  <div class="file-info hidden" id="fileInfo"></div>
+  <button id="runBtn" onclick="runBenchmark()" disabled>Run Benchmark</button>
+</div>
+
+<div class="section hidden" id="resultsSection">
+  <h2>Results</h2>
+  <div class="flex">
+    <div class="result-card">
+      <h3>Old Method (3x Decode)</h3>
+      <div class="label">Decodes audio 3 times</div>
+      <div class="time" id="oldTime">—</div>
+      <p>1. Decode for duration check<br/>2. Decode in convertToWav<br/>3. Decode again in convertToWav</p>
+    </div>
+    <div class="result-card">
+      <h3>New Method (1x Decode)</h3>
+      <div class="label">Decodes audio once</div>
+      <div class="time" id="newTime">—</div>
+      <p>1. Decode once<br/>2. Use for duration + convert</p>
+    </div>
+  </div>
+  <div class="result-card hidden" id="improvementCard">
+    <h3>Improvement</h3>
+    <p id="improvementText"></p>
+  </div>
+</div>
+
+<script>
+let sharedAudioCtx = null;
+
+function getAudioCtx() {
+  if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
+    sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (sharedAudioCtx.state === 'suspended') sharedAudioCtx.resume();
+  return sharedAudioCtx;
+}
+
+function formatMs(ms) {
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  return `${(ms / 1000).toFixed(2)}s`;
+}
+
+// Old method: 3x decode
+async function oldMethod(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const blob = new Blob([arrayBuffer], { type: file.type || 'audio/wav' });
+  const audioCtx = getAudioCtx();
+
+  // Decode 1: duration check
+  const audioBuffer1 = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+  const duration = audioBuffer1.duration;
+
+  // Decode 2: inside convertToWav
+  const arrayBuffer2 = await blob.arrayBuffer();
+  const audioBuffer2 = await audioCtx.decodeAudioData(arrayBuffer2);
+
+  // Decode 3: again inside convertToWav (simulated)
+  const arrayBuffer3 = await blob.arrayBuffer();
+  const audioBuffer3 = await audioCtx.decodeAudioData(arrayBuffer3);
+
+  // Convert to WAV (using last decoded buffer)
+  return audioBufferToWav(audioBuffer3);
+}
+
+// New method: 1x decode
+async function newMethod(file) {
+  const arrayBuffer = await file.arrayBuffer();
+  const audioCtx = getAudioCtx();
+
+  // Decode once
+  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+  const duration = audioBuffer.duration;
+
+  // Convert to WAV (using same buffer)
+  return audioBufferToWav(audioBuffer);
+}
+
+function audioBufferToWav(buffer) {
+  const numChannels = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const length = buffer.length;
+  const bytesPerSample = 2;
+  const dataSize = length * numChannels * bytesPerSample;
+  const arrayBuffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(arrayBuffer);
+
+  function writeString(offset, str) {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  }
+
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * numChannels * bytesPerSample, true);
+  view.setUint16(32, numChannels * bytesPerSample, true);
+  view.setUint16(34, 16, true);
+  writeString(36, 'data');
+  view.setUint32(40, dataSize, true);
+
+  const channels = [];
+  for (let ch = 0; ch < numChannels; ch++) channels.push(buffer.getChannelData(ch));
+
+  let offset = 44;
+  for (let i = 0; i < length; i++) {
+    for (let ch = 0; ch < numChannels; ch++) {
+      const sample = Math.max(-1, Math.min(1, channels[ch][i]));
+      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+      offset += 2;
+    }
+  }
+
+  return new Blob([arrayBuffer], { type: 'audio/wav' });
+}
+
+document.getElementById('audioFile').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (file) {
+    const info = document.getElementById('fileInfo');
+    info.textContent = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+    info.classList.remove('hidden');
+    document.getElementById('runBtn').disabled = false;
+  }
+});
+
+async function runBenchmark() {
+  const file = document.getElementById('audioFile').files[0];
+  if (!file) return;
+
+  const runBtn = document.getElementById('runBtn');
+  runBtn.disabled = true;
+  runBtn.textContent = 'Running...';
+
+  const resultsSection = document.getElementById('resultsSection');
+  resultsSection.classList.remove('hidden');
+
+  // Run old method
+  const oldStart = performance.now();
+  await oldMethod(file);
+  const oldTime = performance.now() - oldStart;
+  document.getElementById('oldTime').textContent = formatMs(oldTime);
+
+  // Run new method
+  const newStart = performance.now();
+  await newMethod(file);
+  const newTime = performance.now() - newStart;
+  document.getElementById('newTime').textContent = formatMs(newTime);
+
+  // Calculate improvement
+  const improvement = ((1 - newTime / oldTime) * 100).toFixed(0);
+  const timeSaved = oldTime - newTime;
+
+  const improvementCard = document.getElementById('improvementCard');
+  improvementCard.classList.remove('hidden');
+  document.getElementById('improvementText').innerHTML = `
+    <span class="improvement">${improvement}% faster</span> — saved ${formatMs(timeSaved)}<br/>
+    Old: ${formatMs(oldTime)} → New: ${formatMs(newTime)}
+  `;
+
+  runBtn.disabled = false;
+  runBtn.textContent = 'Run Again';
+}
+</script>
+</body>
+</html>

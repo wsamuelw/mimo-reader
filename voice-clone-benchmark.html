@@ -1,0 +1,449 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Voice Clone Benchmark — MiMo TTS</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'JetBrains Mono', 'SF Mono', 'Fira Code', monospace;
+    background: #000; color: #fff; padding: 40px 20px;
+    max-width: 900px; margin: 0 auto;
+  }
+  h1 { font-size: 20px; color: #4ade80; margin-bottom: 8px; }
+  .subtitle { font-size: 12px; color: #888; margin-bottom: 32px; }
+  .section { margin-bottom: 32px; }
+  .section h2 { font-size: 14px; color: #fff; margin-bottom: 12px; border-bottom: 1px solid #222; padding-bottom: 8px; }
+  label { display: block; font-size: 11px; color: #999; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+  input[type="file"], input[type="text"], textarea, input[type="number"] {
+    width: 100%; padding: 10px 12px; background: #111; border: 1px solid #222;
+    border-radius: 6px; color: #fff; font-family: inherit; font-size: 13px; margin-bottom: 12px;
+  }
+  textarea { height: 80px; resize: vertical; }
+  button {
+    padding: 10px 20px; background: #4ade80; color: #000; border: none; border-radius: 6px;
+    font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; text-transform: uppercase;
+    letter-spacing: 0.5px; transition: background 0.15s; margin-right: 8px; margin-bottom: 8px;
+  }
+  button:hover { background: #22c55e; }
+  button:disabled { background: #333; color: #666; cursor: not-allowed; }
+  button.secondary { background: #222; color: #fff; }
+  button.secondary:hover { background: #333; }
+  .file-info { font-size: 11px; color: #888; margin-bottom: 12px; }
+  .results-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  .results-table th, .results-table td {
+    padding: 10px 12px; text-align: left; border-bottom: 1px solid #222; font-size: 12px;
+  }
+  .results-table th { color: #888; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+  .results-table td { color: #fff; }
+  .results-table tr:hover td { background: #111; }
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .badge-fast { background: #1b2d1b; color: #4ade80; }
+  .badge-medium { background: #2d2d1b; color: #eab308; }
+  .badge-slow { background: #2d1b1b; color: #ff6b6b; }
+  .progress { margin-top: 16px; }
+  .progress-bar { height: 4px; background: #222; border-radius: 2px; overflow: hidden; }
+  .progress-fill { height: 100%; background: #4ade80; width: 0%; transition: width 0.3s; }
+  .progress-text { font-size: 11px; color: #888; margin-top: 4px; }
+  .summary { margin-top: 24px; padding: 16px; background: #111; border-radius: 8px; border: 1px solid #222; }
+  .summary h3 { font-size: 13px; color: #4ade80; margin-bottom: 12px; }
+  .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; }
+  .summary-item { }
+  .summary-item .label { font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; }
+  .summary-item .value { font-size: 20px; color: #fff; font-weight: 700; margin-top: 4px; }
+  .summary-item .detail { font-size: 11px; color: #999; margin-top: 2px; }
+  .hidden { display: none; }
+  .flex { display: flex; gap: 8px; flex-wrap: wrap; }
+  .flex > * { flex: 1; min-width: 120px; }
+  .status { font-size: 12px; color: #888; margin-top: 8px; }
+  .status.success { color: #4ade80; }
+  .status.error { color: #ff6b6b; }
+  .audio-cell { display: flex; align-items: center; gap: 8px; }
+  .audio-cell audio { height: 32px; }
+</style>
+</head>
+<body>
+
+<h1>Voice Clone Benchmark</h1>
+<p class="subtitle">Measure voice clone latency and variability</p>
+
+<div class="section">
+  <h2>Setup</h2>
+  <label>API Key</label>
+  <input type="text" id="apiKey" placeholder="tp-xxxxxxxxxx" />
+  <label>Reference Audio</label>
+  <input type="file" id="audioFile" accept="audio/*" />
+  <div class="file-info hidden" id="fileInfo"></div>
+  <label>Text to Generate</label>
+  <textarea id="textInput" placeholder="Enter text to generate...">Hello, this is a voice clone benchmark test.</textarea>
+  <div class="flex">
+    <div>
+      <label>Number of Tests</label>
+      <input type="number" id="numTests" value="5" min="1" max="20" />
+    </div>
+    <div>
+      <label>Region</label>
+      <div class="flex">
+        <button class="secondary region-btn" data-region="sgp" onclick="selectRegion('sgp')">SGP</button>
+        <button class="secondary region-btn" data-region="cn" onclick="selectRegion('cn')">CN</button>
+        <button class="secondary region-btn" data-region="standard" onclick="selectRegion('standard')">STD</button>
+      </div>
+    </div>
+  </div>
+  <div style="margin-top: 12px;">
+    <button id="runBtn" onclick="runBenchmark()" disabled>Run Benchmark</button>
+    <button id="stopBtn" class="secondary hidden" onclick="stopBenchmark()">Stop</button>
+  </div>
+  <div class="status hidden" id="status"></div>
+</div>
+
+<div class="section hidden" id="progressSection">
+  <h2>Running Tests</h2>
+  <div class="progress">
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <div class="progress-text" id="progressText">Preparing...</div>
+  </div>
+</div>
+
+<div class="section hidden" id="resultsSection">
+  <h2>Results</h2>
+  <table class="results-table">
+    <thead>
+      <tr>
+        <th>Test #</th>
+        <th>Process Time</th>
+        <th>API Time</th>
+        <th>Total Time</th>
+        <th>Speed</th>
+        <th>Output</th>
+      </tr>
+    </thead>
+    <tbody id="resultsBody"></tbody>
+  </table>
+  <div class="summary hidden" id="summary"></div>
+</div>
+
+<script>
+const ENDPOINTS = {
+  sgp: 'https://token-plan-sgp.xiaomimimo.com/v1/chat/completions',
+  cn: 'https://token-plan-cn.xiaomimimo.com/v1/chat/completions',
+  standard: 'https://api.xiaomimimo.com/v1/chat/completions',
+};
+
+let selectedRegion = 'sgp';
+let sharedAudioCtx = null;
+let stopped = false;
+
+function getAudioCtx() {
+  if (!sharedAudioCtx || sharedAudioCtx.state === 'closed') {
+    sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (sharedAudioCtx.state === 'suspended') sharedAudioCtx.resume();
+  return sharedAudioCtx;
+}
+
+function selectRegion(region) {
+  selectedRegion = region;
+  document.querySelectorAll('.region-btn').forEach(btn => {
+    btn.style.background = btn.dataset.region === region ? '#4ade80' : '#222';
+    btn.style.color = btn.dataset.region === region ? '#000' : '#fff';
+  });
+}
+
+document.getElementById('audioFile').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (file) {
+    const info = document.getElementById('fileInfo');
+    info.textContent = `${file.name} (${(file.size / 1024).toFixed(1)} KB)`;
+    info.classList.remove('hidden');
+    checkReady();
+  }
+});
+
+document.getElementById('apiKey').addEventListener('input', checkReady);
+
+function checkReady() {
+  const key = document.getElementById('apiKey').value.trim();
+  const file = document.getElementById('audioFile').files[0];
+  document.getElementById('runBtn').disabled = !(key && file);
+}
+
+function formatMs(ms) {
+  if (ms < 1000) return `${Math.round(ms)}ms`;
+  return `${(ms / 1000).toFixed(2)}s`;
+}
+
+function getSpeedBadge(ms) {
+  if (ms < 5000) return '<span class="badge badge-fast">Fast</span>';
+  if (ms < 15000) return '<span class="badge badge-medium">Medium</span>';
+  return '<span class="badge badge-slow">Slow</span>';
+}
+
+async function processAudio(file) {
+  const start = performance.now();
+  const arrayBuffer = await file.arrayBuffer();
+  const audioCtx = getAudioCtx();
+  const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+
+  // Convert to WAV
+  const numChannels = audioBuffer.numberOfChannels;
+  const sampleRate = audioBuffer.sampleRate;
+  const length = audioBuffer.length;
+  const bytesPerSample = 2;
+  const dataSize = length * numChannels * bytesPerSample;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  function writeString(offset, str) {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  }
+
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * numChannels * bytesPerSample, true);
+  view.setUint16(32, numChannels * bytesPerSample, true);
+  view.setUint16(34, 16, true);
+  writeString(36, 'data');
+  view.setUint32(40, dataSize, true);
+
+  const channels = [];
+  for (let ch = 0; ch < numChannels; ch++) channels.push(audioBuffer.getChannelData(ch));
+
+  let offset = 44;
+  for (let i = 0; i < length; i++) {
+    for (let ch = 0; ch < numChannels; ch++) {
+      const sample = Math.max(-1, Math.min(1, channels[ch][i]));
+      view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+      offset += 2;
+    }
+  }
+
+  const wavBlob = new Blob([buffer], { type: 'audio/wav' });
+
+  // Convert to base64 data URL
+  const dataUrl = await new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onload = (e) => resolve(e.target.result);
+    reader.readAsDataURL(wavBlob);
+  });
+
+  const processTime = performance.now() - start;
+  return { dataUrl, processTime };
+}
+
+async function callApi(apiKey, text, voiceDataUrl) {
+  const body = {
+    model: 'mimo-v2.5-tts-voiceclone',
+    messages: [
+      { role: 'user', content: 'Clone this voice' },
+      { role: 'assistant', content: text },
+    ],
+    audio: { voice: voiceDataUrl, format: 'wav' },
+  };
+
+  const start = performance.now();
+  const resp = await fetch(ENDPOINTS[selectedRegion], {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(body),
+  });
+  const apiTime = performance.now() - start;
+
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => 'Unknown error');
+    throw new Error(`API error ${resp.status}: ${errText}`);
+  }
+
+  const data = await resp.json();
+  const audioData = data?.choices?.[0]?.message?.audio?.data;
+
+  let audioUrl = null;
+  if (audioData && typeof audioData === 'string') {
+    const binary = atob(audioData);
+    const bytes = new Uint8Array(binary.length);
+    for (let j = 0; j < binary.length; j++) bytes[j] = binary.charCodeAt(j);
+    const blob = new Blob([bytes], { type: 'audio/wav' });
+    audioUrl = URL.createObjectURL(blob);
+  }
+
+  return { apiTime, audioUrl };
+}
+
+function showStatus(message, type = '') {
+  const status = document.getElementById('status');
+  status.textContent = message;
+  status.className = `status ${type}`;
+  status.classList.remove('hidden');
+}
+
+function stopBenchmark() {
+  stopped = true;
+  document.getElementById('stopBtn').classList.add('hidden');
+  document.getElementById('runBtn').classList.remove('hidden');
+  document.getElementById('runBtn').disabled = false;
+  showStatus('Benchmark stopped.', 'error');
+}
+
+async function runBenchmark() {
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const text = document.getElementById('textInput').value.trim();
+  const numTests = parseInt(document.getElementById('numTests').value) || 5;
+  const file = document.getElementById('audioFile').files[0];
+
+  if (!apiKey || !file || !text) return;
+
+  stopped = false;
+  const runBtn = document.getElementById('runBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  runBtn.classList.add('hidden');
+  stopBtn.classList.remove('hidden');
+
+  const progressSection = document.getElementById('progressSection');
+  const resultsSection = document.getElementById('resultsSection');
+  const progressFill = document.getElementById('progressFill');
+  const progressText = document.getElementById('progressText');
+  const resultsBody = document.getElementById('resultsBody');
+  const summary = document.getElementById('summary');
+
+  progressSection.classList.remove('hidden');
+  resultsSection.classList.remove('hidden');
+  resultsBody.innerHTML = '';
+  summary.classList.add('hidden');
+
+  const results = [];
+  let dataUrl = null;
+  let processTime = 0;
+
+  // Process audio once (reuse for all tests)
+  showStatus('Processing audio...', '');
+  try {
+    const processed = await processAudio(file);
+    dataUrl = processed.dataUrl;
+    processTime = processed.processTime;
+    showStatus(`Audio processed in ${formatMs(processTime)}`, 'success');
+  } catch (err) {
+    showStatus(`Audio processing failed: ${err.message}`, 'error');
+    runBtn.classList.remove('hidden');
+    stopBtn.classList.add('hidden');
+    return;
+  }
+
+  // Run API tests
+  for (let i = 0; i < numTests; i++) {
+    if (stopped) break;
+
+    const progress = ((i + 1) / numTests) * 100;
+    progressFill.style.width = `${progress}%`;
+    progressText.textContent = `Test ${i + 1} of ${numTests}...`;
+
+    try {
+      const { apiTime, audioUrl } = await callApi(apiKey, text, dataUrl);
+      const totalTime = processTime + apiTime;
+
+      results.push({ test: i + 1, processTime, apiTime, totalTime, audioUrl, error: null });
+
+      // Add row to table
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${i + 1}</td>
+        <td>${formatMs(processTime)}</td>
+        <td>${formatMs(apiTime)}</td>
+        <td>${formatMs(totalTime)}</td>
+        <td>${getSpeedBadge(totalTime)}</td>
+        <td>${audioUrl
+          ? `<div class="audio-cell"><audio controls src="${audioUrl}"></audio></div>`
+          : '—'
+        }</td>
+      `;
+      resultsBody.appendChild(row);
+
+      showStatus(`Test ${i + 1} complete: ${formatMs(totalTime)}`, 'success');
+    } catch (err) {
+      results.push({ test: i + 1, processTime, apiTime: 0, totalTime: processTime, audioUrl: null, error: err.message });
+
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${i + 1}</td>
+        <td>${formatMs(processTime)}</td>
+        <td>—</td>
+        <td>—</td>
+        <td>—</td>
+        <td><span style="color: #ff6b6b;">${err.message}</span></td>
+      `;
+      resultsBody.appendChild(row);
+
+      showStatus(`Test ${i + 1} failed: ${err.message}`, 'error');
+    }
+  }
+
+  // Calculate summary
+  const validResults = results.filter(r => !r.error);
+  if (validResults.length >= 2) {
+    const apiTimes = validResults.map(r => r.apiTime).sort((a, b) => a - b);
+    const totalTimes = validResults.map(r => r.totalTime).sort((a, b) => a - b);
+
+    const minApi = apiTimes[0];
+    const maxApi = apiTimes[apiTimes.length - 1];
+    const avgApi = apiTimes.reduce((a, b) => a + b, 0) / apiTimes.length;
+    const medianApi = apiTimes[Math.floor(apiTimes.length / 2)];
+
+    const minTotal = totalTimes[0];
+    const maxTotal = totalTimes[totalTimes.length - 1];
+    const avgTotal = totalTimes.reduce((a, b) => a + b, 0) / totalTimes.length;
+    const medianTotal = totalTimes[Math.floor(totalTimes.length / 2)];
+
+    const variance = apiTimes.reduce((sum, t) => sum + Math.pow(t - avgApi, 2), 0) / apiTimes.length;
+    const stdDev = Math.sqrt(variance);
+
+    summary.innerHTML = `
+      <h3>Summary (${validResults.length} tests)</h3>
+      <div class="summary-grid">
+        <div class="summary-item">
+          <div class="label">API Latency</div>
+          <div class="value">${formatMs(medianApi)}</div>
+          <div class="detail">Median of ${validResults.length} tests</div>
+        </div>
+        <div class="summary-item">
+          <div class="label">Min / Max</div>
+          <div class="value">${formatMs(minApi)} — ${formatMs(maxApi)}</div>
+          <div class="detail">Range: ${formatMs(maxApi - minApi)}</div>
+        </div>
+        <div class="summary-item">
+          <div class="label">Std Deviation</div>
+          <div class="value">${formatMs(stdDev)}</div>
+          <div class="detail">${((stdDev / avgApi) * 100).toFixed(0)}% variability</div>
+        </div>
+        <div class="summary-item">
+          <div class="label">Process Time</div>
+          <div class="value">${formatMs(processTime)}</div>
+          <div class="detail">Client-side (one-time)</div>
+        </div>
+      </div>
+    `;
+    summary.classList.remove('hidden');
+  }
+
+  progressText.textContent = stopped ? 'Stopped.' : 'Done!';
+  runBtn.classList.remove('hidden');
+  stopBtn.classList.add('hidden');
+  runBtn.disabled = false;
+}
+
+// Initialize region selection
+selectRegion('sgp');
+</script>
+</body>
+</html>
