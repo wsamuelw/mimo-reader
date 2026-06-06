@@ -1,6 +1,6 @@
 # MiMo TTS Reader
 
-A web-based text-to-speech app powered by [MiMo TTS](https://xiaomimimo.com). Design custom voices, clone any voice, and generate natural speech — all in your browser.
+A web-based text-to-speech app powered by [MiMo TTS](https://platform.xiaomimimo.com/docs/en-US/welcome). Design custom voices, clone any voice, and generate natural speech — all in your browser.
 
 **[Live Demo →](https://wsamuelw.github.io/mimo-reader/)**
 
@@ -17,7 +17,7 @@ A web-based text-to-speech app powered by [MiMo TTS](https://xiaomimimo.com). De
 
 ## Getting Started
 
-1. **Get an API key** from [MiMo TTS](https://xiaomimimo.com)
+1. **Get an API key** from [MiMo TTS](https://platform.xiaomimimo.com/docs/en-US/welcome)
 2. **Open the app** at [wsamuelw.github.io/mimo-reader](https://wsamuelw.github.io/mimo-reader/)
 3. **Add your API key** in Settings (top-right corner)
 4. **Enter text**, pick a voice, and hit Generate
@@ -108,6 +108,6 @@ This project is open source and available under the [MIT License](LICENSE).
 
 ## Acknowledgments
 
-- [MiMo TTS](https://xiaomimimo.com) for the TTS API
+- [MiMo TTS](https://platform.xiaomimimo.com/docs/en-US/welcome) for the TTS API
 - [JetBrains Mono](https://www.jetbrains.com/mono/) for the font
 - [lamejs](https://github.com/zhuker/lamejs) for client-side MP3 encoding
