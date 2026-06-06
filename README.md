@@ -11,6 +11,8 @@ https://github.com/user-attachments/assets/5bd1c4ec-60b7-4899-a73b-d29ac71049c5
 - **Podcast Production** — Generate voiceovers for intros, outros, and ad reads. Choose from 100 voices or clone your own.
 - **Marketing Content** — Create voiceovers for social media videos, ads, and presentations. Match your brand voice with custom descriptions.
 - **Accessibility** — Listen to any text read aloud. Useful for dyslexia, visual impairments, or audio-first learning.
+- **E-Learning** — Narrate training materials, courses, and tutorials with consistent, professional voices.
+- **Content Localization** — Generate voiceovers in different accents (Australian, British, French, Japanese) for international audiences.
 
 ## Features
 
