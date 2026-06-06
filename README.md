@@ -6,6 +6,12 @@ https://github.com/user-attachments/assets/5bd1c4ec-60b7-4899-a73b-d29ac71049c5
 
 **[Live Demo →](https://wsamuelw.github.io/mimo-reader/)**
 
+## Use Cases
+
+- **Podcast Production** — Generate voiceovers for intros, outros, and ad reads. Choose from 100 voices or clone your own.
+- **Marketing Content** — Create voiceovers for social media videos, ads, and presentations. Match your brand voice with custom descriptions.
+- **Accessibility** — Listen to any text read aloud. Useful for dyslexia, visual impairments, or audio-first learning.
+
 ## Features
 
 - **100 preset voices** across 6 categories (Conversational, Professional, Expressive, Youthful, Character, Accent)
