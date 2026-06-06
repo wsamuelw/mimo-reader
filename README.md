@@ -2,6 +2,8 @@
 
 A web-based text-to-speech app powered by [MiMo TTS](https://platform.xiaomimimo.com/docs/en-US/welcome). Design custom voices, clone any voice, and generate natural speech — all in your browser.
 
+https://github.com/user-attachments/assets/video-demo.mov
+
 **[Live Demo →](https://wsamuelw.github.io/mimo-reader/)**
 
 ## Features
