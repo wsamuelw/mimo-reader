@@ -6,6 +6,11 @@ https://github.com/user-attachments/assets/5bd1c4ec-60b7-4899-a73b-d29ac71049c5
 
 **[Live Demo →](https://wsamuelw.github.io/mimo-reader/)**
 
+I'm using **MiMo Open Platform** — Xiaomi's most powerful AI (MiMo V2.5 etc). Sign up with my invite code: both get **$2 API credits + 10% off** your first plan.
+
+**Invite code:** `RRJPZE`
+[**Sign up →**](https://platform.xiaomimimo.com?ref=RRJPZE) *(Auto-filled on sign-up · Credits valid for 40 days)*
+
 ![MiMo Invite Code](images/RRJPZE.png)
 
 ## Use Cases
