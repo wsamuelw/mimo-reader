@@ -6,6 +6,8 @@ https://github.com/user-attachments/assets/5bd1c4ec-60b7-4899-a73b-d29ac71049c5
 
 **[Live Demo →](https://wsamuelw.github.io/mimo-reader/)**
 
+![MiMo Invite Code](images/RRJPZE.png)
+
 ## Use Cases
 
 - **Podcast Production** — Generate voiceovers for intros, outros, and ad reads. Choose from 100 voices or clone your own.
